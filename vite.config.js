@@ -52,6 +52,7 @@ export default defineConfig({
 		alias: {
 			'@destam': path.resolve(__dirname, './destam/destam'),
 			'@destamatic-ui': path.resolve(__dirname, './destamatic-ui'),
-		}
+		},
+        extensions: ['.js', '.ts', '.tsx', '.jsx'],
 	},
 });
