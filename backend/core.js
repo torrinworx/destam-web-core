@@ -19,15 +19,16 @@ export default example = () => {
 */
 
 import { WebSocketServer } from 'ws';
-import { Observer } from 'destam-dom';
+import { createNetwork } from 'destam';
+import { Observer, OObject, OArray } from 'destam-dom';
 
 import Jobs from './jobs.js';
-import { parse } from './clone.js';
+import { parse, stringify } from './clone.js';
 
 // Determine if the users session token is valid.
 const authenticate = (token) => {
-    if (token) {
-        // handle db lookup of user and all that stuff here.
+    if (token && token != 'null') {
+        // TODO: handle db lookup of user and all that stuff here.
         return true
     } else {
         return false;
@@ -37,12 +38,48 @@ const authenticate = (token) => {
 export default async (server) => {
     const wss = new WebSocketServer({ server });
     const jobs = await Jobs('./backend/jobs');
-    console.log(jobs);
 
     wss.on('connection', async (ws, req) => {
-        const authenticated = Observer.mutable(authenticate(
-            new URLSearchParams(req.url.split('?')[1]).get('sessionToken')
-        ));
+        let sync;
+        const authenticated = Observer.mutable(false);
+
+        authenticated.watch(d => {
+            console.log('FROM HERE AUTHENTICATED OBSERVER')
+            console.log(d.value)
+            if (d.value) {
+                sync = OObject({
+                    notifications: OArray[{ type: 'warning', content: 'warning from the server!' }]
+                })
+                let network = createNetwork(sync.observer);
+                const fromClient = {};
+
+                ws.send(JSON.stringify({ name: 'sync', result: stringify(sync) }));
+
+                network.digest(async (changes, observerRefs) => {
+                    const encodedChanges = stringify(
+                        changes, { observerRefs: observerRefs, observerNetwork: network }
+                    );
+                    ws.send(JSON.stringify({ name: 'sync', result: encodedChanges }));
+                }, 1000 / 30, (arg) => arg === fromClient);
+
+                ws.on("message", (msg) => {
+                    msg = parse(msg);
+                    authenticated.set(authenticate(msg.sessionToken));
+                    if (authenticated.get() && msg.name === 'sync') {
+                        // TODO: validate changes follow the validator/schema
+                        network.apply(parse(msg.commit), fromClient);
+                    }
+                });
+
+                ws.on("close", () => {
+                    network.remove();
+                });
+            }
+        });
+
+        const sessionToken = new URLSearchParams(req.url.split('?')[1]).get('sessionToken');
+        
+        authenticated.set(authenticate(sessionToken));
 
         ws.on('message', async msg => {
             msg = parse(msg);
@@ -52,7 +89,8 @@ export default async (server) => {
             if (job) {
                 if (authenticated.get() || !job.authenticated) {
                     try {
-                        await job.init(msg);
+                        const result = await job.init(msg, sync);
+                        ws.send(JSON.stringify({ name: msg.name, result: result }));
                     } catch (error) {
                         console.error(`Error running job "${msg.name}":`, error);
                     }

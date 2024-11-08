@@ -8,7 +8,7 @@ const getCookie = (name) => {
     if (parts.length === 2) return parts.pop().split(';').shift();
 };
 const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-const sessionToken = 'sesfsdfsdfsdfsdf'
+const sessionToken = null;
 document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
 
 const initWS = () => {
@@ -54,6 +54,10 @@ export const jobRequest = (name, params) => {
 };
 
 ws = initWS();
+ws.addEventListener('message', (msg) => {
+
+    console.log(msg.data)
+})
 
 const path = window.location.pathname;
 
