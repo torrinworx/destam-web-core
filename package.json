@@ -14,7 +14,7 @@
         "bcryptjs": "^2.4.3",
         "destam": "^0.3.2",
         "destam-dom": "^0.8.11",
-        "destamatic-ui": "file:destamatic-ui",
+        "destamatic-ui": "^1.2.0",
         "dotenv": "^16.4.5",
         "express": "^4.21.0",
         "feather-icons": "^4.29.2",

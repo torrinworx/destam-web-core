@@ -30,6 +30,7 @@ import { createServer as createViteServer } from 'vite';
 
 import Jobs from './jobs.js';
 import { parse, stringify } from './clone.js';
+import { coreServer } from '../index.js';
 
 // TODO: Determine if the users session token is valid.
 const authenticate = (token) => {
@@ -121,7 +122,7 @@ const core = async (server, jobs_dir) => {
     });
 };
 
-export const coreServer = async (jobs_dir) => {
+const coreServer = async (jobs_dir) => {
     const app = express();
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -155,3 +156,5 @@ export const coreServer = async (jobs_dir) => {
 
     core(app.listen(process.env.PORT || 3000, () => { }), jobs_dir);
 };
+
+export default coreServer;
