@@ -73,8 +73,6 @@ export default async (server) => {
         const authenticated = Observer.mutable(false);
 
         authenticated.watch(d => {
-            console.log('FROM HERE AUTHENTICATED OBSERVER')
-            console.log(d.value)
             if (d.value) {
                 sync = OObject({
                     notifications: OArray([
