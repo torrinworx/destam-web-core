@@ -4,8 +4,8 @@
     "main": "./backend/index.js",
     "type": "module",
     "scripts": {
-        "dev": "nodemon --watch ./backend --exec node ./backend/index.js",
-        "start": "node ./backend/index.js",
+        "dev": "nodemon --watch ./client --watch ./server --watch ./example --exec node ./example/server.js",
+        "start": "node ./example/server.js",
         "build": "npx vite build"
     },
     "author": "Torrin Leonard",

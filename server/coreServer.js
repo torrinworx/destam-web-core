@@ -18,14 +18,20 @@ export default example = () => {
 };
 */
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createNetwork } from 'destam';
 import { Observer, OObject, OArray } from 'destam-dom';
+import { createServer as createViteServer } from 'vite';
 
 import Jobs from './jobs.js';
 import { parse, stringify } from './clone.js';
 
-// Determine if the users session token is valid.
+// TODO: Determine if the users session token is valid.
 const authenticate = (token) => {
     if (token && token != 'null') {
         // TODO: handle db lookup of user and all that stuff here.
@@ -42,10 +48,10 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
     ws.send(JSON.stringify({ name: 'sync', result: stringify(sync) }));
 
     network.digest(async (changes, observerRefs) => {
-        const encodedChanges = stringify(
+        const serverChanges = stringify(
             changes, { observerRefs: observerRefs, observerNetwork: network }
         );
-        ws.send(JSON.stringify({ name: 'sync', result: encodedChanges }));
+        ws.send(JSON.stringify({ name: 'sync', result: serverChanges }));
     }, 1000 / 30, (arg) => arg === fromClient);
 
     ws.on("message", (msg) => {
@@ -53,20 +59,20 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
         authenticated.set(authenticate(msg.sessionToken));
         if (authenticated.get() && msg.name === 'sync') {
             // TODO: validate changes follow the validator/schema
-            network.apply(parse(msg.commit), fromClient);
+            network.apply(parse(msg.clientChanges), fromClient);
         }
     });
 
     ws.on("close", () => {
         network.remove();
     });
-    
+
     return sync;
 };
 
-export default async (server) => {
+const core = async (server, jobs_dir) => {
     const wss = new WebSocketServer({ server });
-    const jobs = await Jobs('./backend/jobs');
+    const jobs = await Jobs(jobs_dir);
 
     wss.on('connection', async (ws, req) => {
         let sync;
@@ -95,20 +101,57 @@ export default async (server) => {
             authenticated.set(authenticate(msg.sessionToken));
 
             const job = jobs[msg.name];
-            if (job) {
-                if (authenticated.get() || !job.authenticated) {
-                    try {
-                        const result = await job.init(msg, sync);
-                        ws.send(JSON.stringify({ name: msg.name, result: result }));
-                    } catch (error) {
-                        console.error(`Error running job "${msg.name}":`, error);
-                    }
-                } else {
-                    console.error(`Unauthorized access attempt to job: ${msg.name}`);
-                }
-            } else {
+            if (!job) {
                 console.error(`Job not found: ${msg.name}`);
+                return;
+            }
+
+            if (!authenticated.get() && job.authenticated) {
+                console.error(`Unauthorized access attempt to job: ${msg.name}`);
+                return;
+            }
+
+            try {
+                const result = await job.init(msg, job.authenticated ? sync : undefined);
+                ws.send(JSON.stringify({ name: msg.name, result: result }));
+            } catch (error) {
+                console.error(`Error running job "${msg.name}":`, error);
             }
         });
     });
+};
+
+export const coreServer = async (jobs_dir) => {
+    const app = express();
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+    if (process.env.ENV === 'production') {
+        app.use(express.static(path.join(__dirname, '../build')));
+        app.get('*', (_req, res) => {
+            res.sendFile(path.resolve(__dirname, '../build', 'index.html'));
+        });
+    } else {
+        const vite = await createViteServer({ server: { middlewareMode: 'html' } });
+
+        app.use(vite.middlewares);
+
+        app.get('*', async (req, res, next) => {
+            try {
+                const html = await vite.transformIndexHtml(
+                    req.originalUrl,
+                    fs.readFileSync(
+                        path.resolve(__dirname, 'index.html'),
+                        'utf-8'
+                    )
+                );
+
+                res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+            } catch (e) {
+                vite.ssrFixStacktrace(e);
+                next(e);
+            }
+        });
+    }
+
+    core(app.listen(process.env.PORT || 3000, () => { }), jobs_dir);
 };

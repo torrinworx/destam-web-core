@@ -2,7 +2,8 @@
 export default () => {
     return {
         authenticated: false,
-        init: () => {
+        init: (test) => {
+            console.log(test)
             console.log("UNAUTHENTICATED");
 
             return "Hi there!!!"

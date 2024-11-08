@@ -41,7 +41,7 @@ if (process.env.ENV === 'production') {
 plugins.push(viteMarkdownPlugin());
 
 export default defineConfig({
-	root: './frontend',
+	root: './example',
 	plugins,
 	esbuild: {
 		jsx: 'preserve',

@@ -1,7 +1,7 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 
-const Jobs = async (directory = '../jobs', props = {}) => {
+const Jobs = async (directory, props = {}) => {
     const jobs = new Map();
     const jobsDirectory = path.resolve(directory);
 

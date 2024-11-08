@@ -226,4 +226,4 @@ export const parse = (state, options) => {
 
 export const clone = (value, options) => {
 	return parse(stringify(value, options), options);
-}
+};
