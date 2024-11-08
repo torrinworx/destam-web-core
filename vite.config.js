@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite';
-import { plugin as viteMarkdownPlugin } from 'vite-plugin-markdown';
 import assertRemove from 'destam-dom/transform/assertRemove';
 import compileHTMLLiteral from 'destam-dom/transform/htmlLiteral';
 
@@ -38,8 +37,6 @@ if (process.env.ENV === 'production') {
 	plugins.push(createTransform('assert-remove', assertRemove));
 }
 
-plugins.push(viteMarkdownPlugin());
-
 export default defineConfig({
 	root: './example',
 	plugins,
@@ -47,7 +44,6 @@ export default defineConfig({
 		jsx: 'preserve',
 	},
 	base: '',
-	assetsInclude: ['**/*.md'],
 	resolve: {
 		alias: {
 			'@destam': path.resolve(__dirname, './destam/destam'),

@@ -30,7 +30,6 @@ import { createServer as createViteServer } from 'vite';
 
 import Jobs from './jobs.js';
 import { parse, stringify } from './clone.js';
-import { coreServer } from '../index.js';
 
 // TODO: Determine if the users session token is valid.
 const authenticate = (token) => {
