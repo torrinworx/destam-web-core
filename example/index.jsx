@@ -1,5 +1,6 @@
+import { Observer } from 'destam-dom';
 import { coreClient, jobRequest } from '../client/coreClient.jsx';
-import { Button } from 'destamatic-ui';
+import { Typography, TextField, Button } from 'destamatic-ui';
 
 // Setting the session token:
 const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
@@ -7,8 +8,12 @@ const sessionToken = 'asasdasd';
 document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
 
 const App = ({ state }) => {
-    console.log(state);
-    return <>
+    // const email = state.client.observer.path('email').def('');
+	const email = Observer.mutable();
+    console.log(email);
+    console.log(TextField);
+
+    return <div>
         <Button
             type='contained'
             label='authenticated'
@@ -25,9 +30,14 @@ const App = ({ state }) => {
                 console.log(test);
             }}
         />
-    </>;
+		<TextField value={email} placeholder="Email" />
+
+    </div>;
 };
 
-const NotFound = () => <div style={{ color: 'red' }}>Not Found 404</div>;
+const NotFound = () => <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+    <Typography type='h4'>Not Found 404</Typography>
+</div>;
+
 
 coreClient(App, NotFound);

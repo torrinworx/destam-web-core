@@ -2,8 +2,6 @@ import { defineConfig } from 'vite';
 import assertRemove from 'destam-dom/transform/assertRemove';
 import compileHTMLLiteral from 'destam-dom/transform/htmlLiteral';
 
-import path from 'path';
-
 const createTransform = (name, transform, jsx, options) => ({
 	name,
 	transform(code, id) {
@@ -45,10 +43,6 @@ export default defineConfig({
 	},
 	base: '',
 	resolve: {
-		alias: {
-			'@destam': path.resolve(__dirname, './destam/destam'),
-			'@destamatic-ui': path.resolve(__dirname, './destamatic-ui'),
-		},
         extensions: ['.js', '.ts', '.tsx', '.jsx'],
 	},
 });

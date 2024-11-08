@@ -112,9 +112,6 @@ export const syncNetwork = () => {
 
 export const coreClient = (App, NotFound) => {
     ws = initWS();
-
     const state = syncNetwork();
-    const content = window.location.pathname === '/' ? <App state={state} /> : <NotFound />;
-
-    mount(document.body, content);
+    mount(document.body, window.location.pathname === '/' ? <App state={state} /> : <NotFound />);
 };
