@@ -1,3 +1,7 @@
+/*
+TODO: This could be strucutred a bit neater imo to allow for more flexibilitiy when it comes to the sync stuff maybe?
+*/
+
 import { mount } from 'destam-dom';
 import { parse } from '../server/clone';
 import { OObject, createNetwork } from 'destam';

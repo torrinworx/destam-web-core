@@ -16,6 +16,10 @@ export default example = () => {
         ...
     },
 };
+
+coreServer will accept a connection() function, this function will allows you to run logic on a user makes an Authenticated connection.
+
+connection() gets ran when authenticated = true for the first time in the connection. If authenticated turns false, then it disconnects
 */
 
 import fs from 'fs';
@@ -29,6 +33,7 @@ import { Observer, OObject, OArray } from 'destam-dom';
 import { createServer as createViteServer } from 'vite';
 
 import Jobs from './jobs.js';
+import { initDB } from './db.js';
 import { parse, stringify } from './clone.js';
 
 // TODO: Determine if the users session token is valid.
@@ -70,30 +75,34 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
     return sync;
 };
 
-const core = async (server, jobs_dir) => {
+const core = async (server, jobs_dir, connection) => {
     const wss = new WebSocketServer({ server });
     const jobs = await Jobs(jobs_dir);
 
     wss.on('connection', async (ws, req) => {
         let sync;
+        let connectionProps;
         const authenticated = Observer.mutable(false);
 
         authenticated.watch(d => {
             if (d.value) {
-                sync = OObject({
-                    notifications: OArray([
-                        {
-                            type: 'ok',
-                            content: 'Message from the server!'
+                (async () => {
+                    if (connection) {
+                        connectionProps = await connection(ws, req);
+
+                        // syncnetwork will only activate if the user wants it to.
+                        if (connectionProps && connectionProps.sync) {
+                            sync = connectionProps.sync;
+                            syncNetwork(authenticated, ws, sync);
                         }
-                    ])
-                });
-                syncNetwork(authenticated, ws, sync);
+                    }
+                })();
+            } else if (sync) {
+                ws.close();
             }
         });
 
         const sessionToken = new URLSearchParams(req.url.split('?')[1]).get('sessionToken');
-
         authenticated.set(authenticate(sessionToken));
 
         ws.on('message', async msg => {
@@ -112,7 +121,7 @@ const core = async (server, jobs_dir) => {
             }
 
             try {
-                const result = await job.init(msg, job.authenticated ? sync : undefined);
+                const result = await job.init(msg, job.authenticated ? sync : undefined, ...connectionProps);
                 ws.send(JSON.stringify({ name: msg.name, result: result }));
             } catch (error) {
                 console.error(`Error running job "${msg.name}":`, error);
@@ -121,7 +130,7 @@ const core = async (server, jobs_dir) => {
     });
 };
 
-const coreServer = async (jobs_dir) => {
+const coreServer = async (jobs_dir, connection) => {
     const app = express();
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -153,7 +162,8 @@ const coreServer = async (jobs_dir) => {
         });
     }
 
-    core(app.listen(process.env.PORT || 3000, () => { }), jobs_dir);
+    await initDB();
+    await core(app.listen(process.env.PORT || 3000, () => { }), jobs_dir, connection);
 };
 
 export default coreServer;

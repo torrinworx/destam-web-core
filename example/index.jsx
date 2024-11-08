@@ -1,4 +1,4 @@
-import { Observer } from 'destam-dom';
+import { Observer } from 'destam';
 import { coreClient, jobRequest } from '../client/coreClient.jsx';
 import { Typography, TextField, Button } from 'destamatic-ui';
 
