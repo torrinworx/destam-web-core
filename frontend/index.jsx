@@ -1,5 +1,7 @@
-import { mount } from 'destam-dom';
 import { Button } from 'destamatic-ui';
+import { createNetwork } from 'destam';
+import { parse } from '../backend/clone';
+import { mount, OObject } from 'destam-dom';
 
 let ws;
 const getCookie = (name) => {
@@ -8,7 +10,7 @@ const getCookie = (name) => {
     if (parts.length === 2) return parts.pop().split(';').shift();
 };
 const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-const sessionToken = null;
+const sessionToken = 'sdfsdfsdfsdf';
 document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
 
 const initWS = () => {
@@ -52,6 +54,16 @@ export const jobRequest = (name, params) => {
         }
     });
 };
+
+let remove;
+let network;
+const fromServer = {};
+// State is split in two: state.sync and state.client, this prevents
+// client only updates from needlessly updating the database.
+const state = OObject({
+    client: OObject({})
+});
+window.state = state;
 
 ws = initWS();
 ws.addEventListener('message', (msg) => {
