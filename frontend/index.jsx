@@ -55,8 +55,37 @@ export const jobRequest = (name, params) => {
 
 ws = initWS();
 ws.addEventListener('message', (msg) => {
+    const data = parse(msg.data);
 
-    console.log(msg.data)
+    if (data.name === 'sync') { // look for sync here because other data is returned from the server for jobRequest.
+        const decodedChanges = parse(data.result);
+        if (!state.sync) {
+            if (!Array.isArray(decodedChanges)) {
+                state.sync = decodedChanges; // Clone of OServer
+                network = createNetwork(state.sync.observer);
+
+                network.digest(async (changes, observerRefs) => {
+                    const encodedChanges = stringify(
+                        changes,
+                        { observerRefs: observerRefs, observerNetwork: network }
+                    );
+                    jobRequest('sync', { encodedChanges: encodedChanges })
+                }, 1000 / 30, arg => arg === fromServer);
+
+                window.addEventListener('unload', () => {
+                    if (remove) remove();
+                    if (ws) ws.close();
+                    if (network) network.remove();
+                });
+            } else {
+                console.error("First message should establish sync, received an array instead.");
+            }
+        } else {
+            if (Array.isArray(decodedChanges)) {
+                network.apply(decodedChanges, fromServer);
+            }
+        }
+    }
 })
 
 const path = window.location.pathname;

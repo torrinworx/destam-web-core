@@ -35,6 +35,35 @@ const authenticate = (token) => {
     };
 };
 
+const syncNetwork = (authenticated, ws, sync = OObject({})) => {
+    let network = createNetwork(sync.observer);
+    const fromClient = {};
+
+    ws.send(JSON.stringify({ name: 'sync', result: stringify(sync) }));
+
+    network.digest(async (changes, observerRefs) => {
+        const encodedChanges = stringify(
+            changes, { observerRefs: observerRefs, observerNetwork: network }
+        );
+        ws.send(JSON.stringify({ name: 'sync', result: encodedChanges }));
+    }, 1000 / 30, (arg) => arg === fromClient);
+
+    ws.on("message", (msg) => {
+        msg = parse(msg);
+        authenticated.set(authenticate(msg.sessionToken));
+        if (authenticated.get() && msg.name === 'sync') {
+            // TODO: validate changes follow the validator/schema
+            network.apply(parse(msg.commit), fromClient);
+        }
+    });
+
+    ws.on("close", () => {
+        network.remove();
+    });
+    
+    return sync;
+};
+
 export default async (server) => {
     const wss = new WebSocketServer({ server });
     const jobs = await Jobs('./backend/jobs');
@@ -48,37 +77,19 @@ export default async (server) => {
             console.log(d.value)
             if (d.value) {
                 sync = OObject({
-                    notifications: OArray[{ type: 'warning', content: 'warning from the server!' }]
-                })
-                let network = createNetwork(sync.observer);
-                const fromClient = {};
-
-                ws.send(JSON.stringify({ name: 'sync', result: stringify(sync) }));
-
-                network.digest(async (changes, observerRefs) => {
-                    const encodedChanges = stringify(
-                        changes, { observerRefs: observerRefs, observerNetwork: network }
-                    );
-                    ws.send(JSON.stringify({ name: 'sync', result: encodedChanges }));
-                }, 1000 / 30, (arg) => arg === fromClient);
-
-                ws.on("message", (msg) => {
-                    msg = parse(msg);
-                    authenticated.set(authenticate(msg.sessionToken));
-                    if (authenticated.get() && msg.name === 'sync') {
-                        // TODO: validate changes follow the validator/schema
-                        network.apply(parse(msg.commit), fromClient);
-                    }
+                    notifications: OArray([
+                        {
+                            type: 'ok',
+                            content: 'Message from the server!'
+                        }
+                    ])
                 });
-
-                ws.on("close", () => {
-                    network.remove();
-                });
+                syncNetwork(authenticated, ws, sync);
             }
         });
 
         const sessionToken = new URLSearchParams(req.url.split('?')[1]).get('sessionToken');
-        
+
         authenticated.set(authenticate(sessionToken));
 
         ws.on('message', async msg => {

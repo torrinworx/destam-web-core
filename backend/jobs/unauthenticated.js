@@ -4,6 +4,8 @@ export default () => {
         authenticated: false,
         init: () => {
             console.log("UNAUTHENTICATED");
+
+            return "Hi there!!!"
         }
     }
 };
