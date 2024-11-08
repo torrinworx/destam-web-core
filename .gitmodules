@@ -1,0 +1,3 @@
+[submodule "destamatic-ui"]
+	path = destamatic-ui
+	url = https://github.com/torrinworx/destamatic-ui.git
