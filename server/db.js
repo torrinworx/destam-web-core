@@ -28,9 +28,10 @@ import { clone, stringify, parse } from './clone.js';
 
 config();
 
-const dbName = process.env.DB;
-const dbURL = process.env.DB_URL;
+const dbName = process.env.DB_TABLE;
+const dbURL = process.env.DB;
 let dbClient;
+let db;
 
 export const initDB = async () => {
 	dbClient = new MongoClient(dbURL, { serverSelectionTimeoutMS: 1000 });
@@ -41,33 +42,46 @@ export const initDB = async () => {
 		console.error('Failed to connect to MongoDB:', error);
 		process.exit(1);
 	}
+	db = dbClient.db('webcore');
+
 	return dbClient
 };
 
+/*
+
+- If no query provided, it will create a new document
+*/
 // Stores and manages an Observer in a mongo document given the name of the table.
 // if there is a default value presented
-const ODB = async (collectionName, query, defaultValue = OObject({})) => {
-	const db = dbClient.db(dbName);
+const ODB = async (collectionName, query, value = OObject({})) => {
 	const collection = db.collection(collectionName);
 
-	let dbDocument = await collection.findOne(query);
+	let dbDocument;
 
-	if (!dbDocument) {
-		const initialEmptyState = stringify(defaultValue);
-		const result = await collection.insertOne(initialEmptyState);
-		dbDocument = { ...initialEmptyState, _id: result.insertedId };
+	// Check if the query is empty
+	if (Object.keys(query).length === 0) {
+		// Empty query; create a new document with default value
+		const newDocument = JSON.parse(stringify(value));
+		const result = await collection.insertOne(newDocument);
+		dbDocument = { _id: result.insertedId, ...newDocument };
+	} else {
+		// Non-empty query; search for the document
+		dbDocument = await collection.findOne(query);
+
+		return false
 	}
 
-	let state = parse(dbDocument.state);
+	let state = parse(JSON.stringify(dbDocument));
 
 	state.observer.watchCommit(async () => {
 		await collection.updateOne(
 			{ _id: dbDocument._id },
-			{ $set: { state: stringify(clone(state)) } }
+			{ $set: JSON.parse(stringify(state)) }
 		);
 	});
 
 	return state;
 };
+
 
 export default ODB;

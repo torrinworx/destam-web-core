@@ -25,7 +25,13 @@ const createUser = async () => {
         ])
     }));
 
-    console.log(user); // Should log a user OObject with the current valid session
+
+    console.log(user)
+
+    user.sessions.push(crypto.randomUUID());
+
+    console.log(user)
+    
     return sessionsToken;
 };
 
@@ -36,28 +42,27 @@ const connection = async (ws, req) => {
 
     // const sync = await ODB('users', { "sessions.token": sessionToken }); // TODO: search the users
 
-    const sync = OObject({
-        notifications: OArray([
-            'test',
-            'something',
-            OObject({
-                test: 'something'
-            })
-        ])
-    });
-    console.log(stringify(sync));
-    console.log(typeof(stringify(sync)));
+    // const sync = OObject({
+    //     notifications: OArray([
+    //         'test',
+    //         'something',
+    //         OObject({
+    //             test: 'something'
+    //         })
+    //     ])
+    // });
+    // console.log(stringify(sync));
+    // console.log(typeof(stringify(sync)));
 
-    const syncJSON = JSON.parse(stringify(sync));
-    console.log(syncJSON);
+    // const syncJSON = JSON.parse(stringify(sync));
+    // console.log(syncJSON);
 
-    const syncObserver = parse(JSON.stringify(syncJSON));
-    console.log(syncObserver.observer);
+    // const syncObserver = parse(JSON.stringify(syncJSON));
+    // console.log(syncObserver.observer);
 
-    return {
-        sync: sync,
-    }
-}
-
+    // return {
+    //     sync: sync,
+    // }
+};
 
 coreServer('./example/jobs', connection);
