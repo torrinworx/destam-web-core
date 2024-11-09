@@ -74,8 +74,8 @@ const createStateDoc = (value) => {
 }
 
 const ODB = async (collectionName, query, value = OObject({})) => {
-	const collection = db.collection(collectionName);
 	let dbDocument;
+	const collection = db.collection(collectionName);
 
 	if (Object.keys(query).length === 0) {
 		const stateDoc = createStateDoc(value)
@@ -85,10 +85,7 @@ const ODB = async (collectionName, query, value = OObject({})) => {
 			...stateDoc
 		};
 	} else {
-		const searchQuery = {
-			"state_json.sessions": query
-		};
-		dbDocument = await collection.findOne(searchQuery);
+		dbDocument = await collection.findOne(query);
 		if (!dbDocument) {
 			return false;
 		}
