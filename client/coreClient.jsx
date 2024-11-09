@@ -3,7 +3,7 @@ TODO: This could be strucutred a bit neater imo to allow for more flexibilitiy w
 */
 
 import { mount } from 'destam-dom';
-import { parse } from '../server/clone';
+import { parse, stringify } from '../server/clone';
 import { OObject, createNetwork } from 'destam';
 
 export const getCookie = (name) => {

@@ -50,6 +50,8 @@ const App = ({ state }) => {
                 const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
                 const sessionToken = response.result.sessionToken;
                 document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
+
+                await jobRequest('sync');
             }}
         />
     </div>;

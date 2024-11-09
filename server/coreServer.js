@@ -121,6 +121,8 @@ const core = async (server, jobs_dir, connection) => {
             const status = await authenticate(msg.sessionToken);
             authenticated.set(status);
 
+            if (msg.name === 'sync') return;
+
             const job = jobs[msg.name];
             if (!job) {
                 console.error(`Job not found: ${msg.name}`);
