@@ -16,23 +16,24 @@ const user = {
 };
 
 const createUser = async () => {
-    const sessionsToken = crypto.randomUUID();
-
+    const sessionToken = crypto.randomUUID();
+    console.log(sessionToken);
     // Create user for the first time:
-    const user = await ODB('users', {}, OObject({
+    await ODB('users', {}, OObject({
         sessions: OArray([
-            sessionsToken
-        ])
+            sessionToken
+        ]),
+        profile: OArray({
+            name: 'bob',
+            email: 'bob@example.com'
+        })
     }));
 
+    const user = await ODB('users', sessionToken);
 
     console.log(user)
 
-    user.sessions.push(crypto.randomUUID());
-
-    console.log(user)
-    
-    return sessionsToken;
+    return sessionToken;
 };
 
 // Logic that get's ran and mounted on an authenticated connection.

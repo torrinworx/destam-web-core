@@ -6,7 +6,7 @@ how do we search for it inside mongodb when it's stored as a single string?
 
 {
   "_id": {
-    "$oid": "672d07f876789e711b207dd8"
+	"$oid": "672d07f876789e711b207dd8"
   },
   "userId": [],
   "state": "{\n  \"OBJECT_TYPE\": \"observer_object\",\n  \"id\": \"#2F46183FFCFAD0D366AA2CF507E72343\",\n  \"vals\": []\n}"
@@ -24,11 +24,10 @@ import { config } from 'dotenv';
 import { OObject } from 'destam';
 import { MongoClient } from 'mongodb';
 
-import { clone, stringify, parse } from './clone.js';
+import { stringify, parse } from './clone.js';
 
 config();
 
-const dbName = process.env.DB_TABLE;
 const dbURL = process.env.DB;
 let dbClient;
 let db;
@@ -48,40 +47,64 @@ export const initDB = async () => {
 };
 
 /*
+Stores and manages an Observer in a mongo document given the name of the table.
 
-- If no query provided, it will create a new document
+- If no query provided, it will create a new document given the value
+- Value will be ignored if query provided
+
+How this works:
+Store two versions of the state, one that is the Observer state tree, the other
+is a simplified json structure stored as json that we can search via simple mongodb
+query commands.
+
+The state tree is stored in the key state_tree, and the simple json version is stored
+in the state_json key of the document.
+
+These both get updated in the db with the watchCommit. Querying takes place and is applied,
+not to the whole document, but only to the state_json. So we need to handle this accordingly
+by converting the queries to search the state_json as they will assume that the document is
+only the state_json
 */
-// Stores and manages an Observer in a mongo document given the name of the table.
-// if there is a default value presented
+
+const createStateDoc = (value) => {
+	return {
+		state_tree: JSON.parse(stringify(value)),
+		state_json: JSON.parse(JSON.stringify(value))
+	}
+}
+
 const ODB = async (collectionName, query, value = OObject({})) => {
 	const collection = db.collection(collectionName);
-
 	let dbDocument;
 
-	// Check if the query is empty
 	if (Object.keys(query).length === 0) {
-		// Empty query; create a new document with default value
-		const newDocument = JSON.parse(stringify(value));
-		const result = await collection.insertOne(newDocument);
-		dbDocument = { _id: result.insertedId, ...newDocument };
+		const stateDoc = createStateDoc(value)
+		const result = await collection.insertOne(stateDoc);
+		dbDocument = {
+			_id: result.insertedId,
+			...stateDoc
+		};
 	} else {
-		// Non-empty query; search for the document
-		dbDocument = await collection.findOne(query);
-
-		return false
+		const searchQuery = {
+			"state_json.sessions": query
+		};
+		dbDocument = await collection.findOne(searchQuery);
+		if (!dbDocument) {
+			return false;
+		}
 	}
 
-	let state = parse(JSON.stringify(dbDocument));
+	let state = parse(JSON.stringify(dbDocument.state_tree));
 
-	state.observer.watchCommit(async () => {
+	state.observer.watch(async () => {
 		await collection.updateOne(
 			{ _id: dbDocument._id },
-			{ $set: JSON.parse(stringify(state)) }
+			{
+				$set: createStateDoc(state)
+			}
 		);
 	});
-
 	return state;
 };
-
 
 export default ODB;
