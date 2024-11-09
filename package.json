@@ -11,6 +11,7 @@
     "author": "Torrin Leonard",
     "license": "GPL-3.0",
     "dependencies": {
+        "bcryptjs": "^2.4.3",
         "destam": "^0.4.0",
         "destam-dom": "^0.9.0",
         "dotenv": "^16.4.5",

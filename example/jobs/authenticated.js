@@ -1,9 +1,8 @@
 
 export default () => {
     return {
-        init: (msg, sync) => {
-            console.log(sync);
-            console.log(msg);
+        init: (something) => {
+            console.log('something: ', something);
             console.log("AUTHENTICATED");
         }
     }

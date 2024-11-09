@@ -20,6 +20,12 @@ export default example = () => {
 coreServer will accept a connection() function, this function will allows you to run logic on a user makes an Authenticated connection.
 
 connection() gets ran when authenticated = true for the first time in the connection. If authenticated turns false, then it disconnects
+
+Philosophy with this is that:
+authentication of users is a core piece of web development so we might as well include this in the setup.
+
+This is opinionated.
+
 */
 
 import fs from 'fs';
@@ -29,21 +35,23 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createNetwork } from 'destam';
-import { Observer, OObject, OArray } from 'destam-dom';
+import { Observer, OObject } from 'destam-dom';
 import { createServer as createViteServer } from 'vite';
 
+import ODB from './db.js';
 import Jobs from './jobs.js';
 import { initDB } from './db.js';
 import { parse, stringify } from './clone.js';
 
-// TODO: Determine if the users session token is valid.
-const authenticate = (token) => {
-    if (token && token != 'null') {
-        // TODO: handle db lookup of user and all that stuff here.
-        return true
-    } else {
-        return false;
-    };
+// TODO: Might want to consider only authenticating once on login
+// rather than querying the db on every websocket request.
+const authenticate = async (sessionToken) => {
+    if (sessionToken && sessionToken != 'null') {
+        const user = await ODB('users', { "sessions": sessionToken });
+
+        if (user) return true
+        else return false
+    }
 };
 
 const syncNetwork = (authenticated, ws, sync = OObject({})) => {
@@ -59,9 +67,11 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
         ws.send(JSON.stringify({ name: 'sync', result: serverChanges }));
     }, 1000 / 30, (arg) => arg === fromClient);
 
-    ws.on("message", (msg) => {
+    ws.on("message", async (msg) => {
         msg = parse(msg);
-        authenticated.set(authenticate(msg.sessionToken));
+
+        const status = await authenticate(msg.sessionToken)
+        authenticated.set(status);
         if (authenticated.get() && msg.name === 'sync') {
             // TODO: validate changes follow the validator/schema
             network.apply(parse(msg.clientChanges), fromClient);
@@ -103,11 +113,13 @@ const core = async (server, jobs_dir, connection) => {
         });
 
         const sessionToken = new URLSearchParams(req.url.split('?')[1]).get('sessionToken');
-        authenticated.set(authenticate(sessionToken));
+        const status = await authenticate(sessionToken)
+        authenticated.set(status);
 
         ws.on('message', async msg => {
             msg = parse(msg);
-            authenticated.set(authenticate(msg.sessionToken));
+            const status = await authenticate(msg.sessionToken);
+            authenticated.set(status);
 
             const job = jobs[msg.name];
             if (!job) {
@@ -121,8 +133,14 @@ const core = async (server, jobs_dir, connection) => {
             }
 
             try {
-                const result = await job.init(msg, job.authenticated ? sync : undefined, ...connectionProps);
-                ws.send(JSON.stringify({ name: msg.name, result: result }));
+                const { sync, ...otherProps } = connectionProps || {};
+                const result = await job.init({
+                    msg,
+                    sync: job.authenticated ? sync : undefined,
+                    ...otherProps
+                });
+
+                ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
             } catch (error) {
                 console.error(`Error running job "${msg.name}":`, error);
             }

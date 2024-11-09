@@ -5,9 +5,6 @@ import { Typography, TextField, Button } from 'destamatic-ui';
 // Setting the session token:
 
 const App = ({ state }) => {
-    const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-    document.cookie = `webCore=sdsfsdfsdf; expires=${expires}; path=/; SameSite=Lax`;
-
     // const email = state.client.observer.path('email').def('');
     const email = Observer.mutable('');
     const password = Observer.mutable('');
@@ -46,6 +43,7 @@ const App = ({ state }) => {
             type='contained'
             label='Login'
             onMouseDown={async () => {
+                console.log("Attempting login")
                 const response = await jobRequest('login', { email: email.get(), password: password.get() });
                 console.log(response);
 
