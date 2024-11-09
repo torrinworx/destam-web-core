@@ -6,7 +6,7 @@ export default () => {
             console.log(test)
             console.log("UNAUTHENTICATED");
 
-            return "Hi there!!!"
+            return "UNAUTHENTICATED"
         }
     }
 };
