@@ -73,19 +73,29 @@ const createStateDoc = (value) => {
 	}
 }
 
-const ODB = async (collectionName, query, value = OObject({})) => {
+const transformQueryKeys = (query) => {
+	const transformedQuery = {};
+	for (const key in query) {
+		transformedQuery[`state_json.${key}`] = query[key];
+	}
+	return transformedQuery;
+};
+
+const ODB = async (collectionName, query = {}, value = OObject({})) => {
 	let dbDocument;
 	const collection = db.collection(collectionName);
 
-	if (Object.keys(query).length === 0) {
-		const stateDoc = createStateDoc(value)
+	const transformedQuery = Object.keys(query).length === 0 ? query : transformQueryKeys(query);
+
+	if (Object.keys(transformedQuery).length === 0) {
+		const stateDoc = createStateDoc(value);
 		const result = await collection.insertOne(stateDoc);
 		dbDocument = {
 			_id: result.insertedId,
 			...stateDoc
 		};
 	} else {
-		dbDocument = await collection.findOne(query);
+		dbDocument = await collection.findOne(transformedQuery);
 		if (!dbDocument) {
 			return false;
 		}

@@ -29,7 +29,7 @@ const createUser = async () => {
         })
     }));
 
-    const user = await ODB('users', { "state_json.sessions": sessionToken });
+    const user = await ODB('users', { "sessions": sessionToken });
 
     console.log(user)
 
