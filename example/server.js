@@ -1,6 +1,6 @@
 import { OObject } from "destam";
 
-import ODB from "../server/db.js";
+import ODB from "../server/odb.js";
 import coreServer from "../server/coreServer.js";
 
 // Logic that get's ran and mounted on an authenticated connection.

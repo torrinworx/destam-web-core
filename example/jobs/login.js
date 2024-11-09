@@ -1,7 +1,7 @@
 import bcryptjs from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
-import ODB from '../../server/db.js';
+import ODB from '../../server/odb.js';
 
 export default () => {
     return {

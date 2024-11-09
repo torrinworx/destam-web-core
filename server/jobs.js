@@ -1,3 +1,20 @@
+/**
+ * Jobs Module
+ * 
+ * This module provides a function to load and initialize job modules from a specified directory. It dynamically imports job modules, executes optional initialization logic, and creates handlers for managing job execution.
+ * 
+ * @param {string} directory - The directory path containing job module files.
+ * @param {Object} [props={}] - An optional object of properties to be passed to each job instance.
+ * @returns {Promise<Object>} A promise that resolves to an object containing job handlers.
+ * 
+ * Usage:
+ *   1. Specify a directory containing job files.
+ *   2. Each job file should export a default function that returns an object with:
+ *      - `authenticated` (optional): A boolean indicating if the job requires authentication (default is true if undefined).
+ *      - `init` (optional): A function for the jobs logic.
+ *   3. The handlers object returned can be used to manage jobs, including executing their initialization logic with the specified properties.
+ */
+
 import path from 'path';
 import { promises as fs } from 'fs';
 
