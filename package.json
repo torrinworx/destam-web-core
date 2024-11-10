@@ -1,7 +1,7 @@
 {
     "name": "web-core",
     "version": "1.0.0",
-    "main": "./backend/index.js",
+    "main": "index.js",
     "type": "module",
     "scripts": {
         "dev": "nodemon --watch ./server --watch ./example --exec node ./example/server.js",
