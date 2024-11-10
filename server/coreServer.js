@@ -32,7 +32,7 @@ import { createServer as createViteServer } from 'vite';
 
 import Jobs from './jobs.js';
 import ODB, { initDB } from './odb.js';
-import { parse, stringify } from './clone.js';
+import { parse, stringify } from '../common/clone.js';
 
 const authenticate = async (sessionToken) => {
     if (sessionToken && sessionToken != 'null') {

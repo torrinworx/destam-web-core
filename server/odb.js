@@ -27,7 +27,7 @@ import { config } from 'dotenv';
 import { OObject } from 'destam';
 import { MongoClient } from 'mongodb';
 
-import { stringify, parse } from './clone.js';
+import { stringify, parse } from '../common/clone.js';
 
 config();
 
