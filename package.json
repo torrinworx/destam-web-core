@@ -29,7 +29,7 @@
         "@babel/generator": "^7.25.6",
         "@babel/parser": "^7.25.6",
         "@babel/plugin-syntax-jsx": "^7.24.7",
-        "destamatic-ui": "file:destamatic-ui",
+        "destamatic-ui": "1.2.0",
         "feather-icons": "^4.29.2",
         "nodemon": "^3.1.7",
         "prismjs": "^1.29.0"
