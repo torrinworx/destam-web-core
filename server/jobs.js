@@ -19,12 +19,16 @@
  */
 
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { promises as fs } from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const Jobs = async (directories, props = {}) => {
 	const jobs = new Map();
 	const directoryPaths = Array.isArray(directories) ? directories.map(dir => path.resolve(dir)) : [path.resolve(directories)];
-	directoryPaths.push(path.resolve('./server/jobs'));
+	directoryPaths.push(path.resolve(__dirname, 'jobs'));
 
 	const findJobFiles = async dir => {
 		const entries = await fs.readdir(dir, { withFileTypes: true });
