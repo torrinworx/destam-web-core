@@ -175,6 +175,8 @@ const coreServer = async (jobs_dir, build_dir, connection) => {
 
     if (process.env.ENV === 'production') {
         app.use(express.static(path.resolve(build_dir)));
+        console.log(path.join(path.resolve(build_dir), 'index.html'))
+
         app.get('*', (_req, res) => {
             res.sendFile(path.join(path.resolve(build_dir), 'index.html'));
         });
@@ -201,9 +203,7 @@ const coreServer = async (jobs_dir, build_dir, connection) => {
         });
     }
 
-    await core(app.listen(process.env.PORT || 3000, () => {
-        console.log(`Server running on port ${process.env.PORT || 3000}`);
-    }), jobs_dir, connection);
+    await core(app.listen(process.env.PORT || 3000, () => { }), jobs_dir, connection);
 };
 
 export default coreServer;
