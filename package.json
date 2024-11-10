@@ -1,7 +1,11 @@
 {
     "name": "web-core",
     "version": "1.0.0",
-    "main": "index.js",
+    "exports": {
+        ".": "./common/index.js",
+        "./client": "./client/index.js",
+        "./server": "./server/index.js" 
+    },
     "type": "module",
     "scripts": {
         "dev": "nodemon --watch ./server --watch ./example --exec node ./example/server.js",
