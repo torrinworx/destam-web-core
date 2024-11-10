@@ -3,8 +3,8 @@ TODO: This could be strucutred a bit neater imo to allow for more flexibilitiy w
 */
 
 import { mount } from 'destam-dom';
-import { parse, stringify } from '../common/clone';
 import { OObject, createNetwork } from 'destam';
+import { parse, stringify } from '../common/clone.js';
 
 export const getCookie = (name) => {
     const value = `; ${document.cookie}`;
