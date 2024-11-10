@@ -171,14 +171,16 @@ const core = async (server, jobs_dir, connection) => {
  */
 const coreServer = async (jobs_dir, build_dir, connection) => {
     const app = express();
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+    // Log to see the resolved build_dir path
+    console.log('Resolved build directory:', build_dir);
 
     if (process.env.ENV === 'production') {
         app.use(express.static(path.resolve(build_dir)));
-        console.log(path.join(path.resolve(build_dir), 'index.html'))
+        console.log('Serving index.html from:', path.join(build_dir, 'index.html'));
 
         app.get('*', (_req, res) => {
-            res.sendFile(path.join(path.resolve(build_dir), 'index.html'));
+            res.sendFile(path.join(build_dir, 'index.html'));
         });
     } else {
         const vite = await createViteServer({ server: { middlewareMode: 'html' } });
@@ -203,7 +205,10 @@ const coreServer = async (jobs_dir, build_dir, connection) => {
         });
     }
 
-    await core(app.listen(process.env.PORT || 3000, () => { }), jobs_dir, connection);
+    await core(app.listen(process.env.PORT || 3000, () => {
+        console.log(`Server running on port ${process.env.PORT || 3000}`);
+    }), jobs_dir, connection);
 };
+
 
 export default coreServer;
