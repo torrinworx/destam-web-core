@@ -172,15 +172,19 @@ const core = async (server, jobs_dir, connection) => {
 const coreServer = async (jobs_dir, build_dir, connection) => {
     const app = express();
 
-    // Log to see the resolved build_dir path
-    console.log('Resolved build directory:', build_dir);
+    console.log('Build directory:', build_dir);
 
     if (process.env.ENV === 'production') {
-        app.use(express.static(path.resolve(build_dir)));
-        console.log('Serving index.html from:', path.join(build_dir, 'index.html'));
+        app.use(express.static(build_dir));
+        console.log('Serving from:', path.join(build_dir, 'index.html'));
 
-        app.get('*', (_req, res) => {
-            res.sendFile(path.join(build_dir, 'index.html'));
+        app.get('*', (req, res) => {
+            res.sendFile(path.join(build_dir, 'index.html'), err => {
+                if (err) {
+                    res.status(500).send(err);
+                    console.error('Error serving index.html:', err);
+                }
+            });
         });
     } else {
         const vite = await createViteServer({ server: { middlewareMode: 'html' } });
