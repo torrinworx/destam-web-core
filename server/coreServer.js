@@ -105,7 +105,7 @@ const core = async (server, jobs_dir, connection) => {
                 (async () => {
                     if (connection) {
                         connectionProps = await connection(ws, req, sessionToken);
-                        user = await ODB('users', { "sessions": sessionToken.get() });                    
+                        user = await ODB('users', { "sessions": sessionToken.get() });
                         sync = await ODB('state', { userID: user.userID });
                         syncNetwork(authenticated, ws, sync);
                     }
@@ -169,14 +169,14 @@ const core = async (server, jobs_dir, connection) => {
  * @param {string} jobs_dir - The directory, or list of directories, of job definitions.
  * @param {Function} connection - A function executed when a user makes an authenticated connection.
  */
-const coreServer = async (jobs_dir, connection) => {
+const coreServer = async (jobs_dir, build_dir, connection) => {
     const app = express();
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
     if (process.env.ENV === 'production') {
-        app.use(express.static(path.join(__dirname, '../build')));
+        app.use(express.static(path.resolve(build_dir)));
         app.get('*', (_req, res) => {
-            res.sendFile(path.resolve(__dirname, '../build', 'index.html'));
+            res.sendFile(path.join(path.resolve(build_dir), 'index.html'));
         });
     } else {
         const vite = await createViteServer({ server: { middlewareMode: 'html' } });
@@ -201,7 +201,9 @@ const coreServer = async (jobs_dir, connection) => {
         });
     }
 
-    await core(app.listen(process.env.PORT || 3000, () => { }), jobs_dir, connection);
+    await core(app.listen(process.env.PORT || 3000, () => {
+        console.log(`Server running on port ${process.env.PORT || 3000}`);
+    }), jobs_dir, connection);
 };
 
 export default coreServer;
