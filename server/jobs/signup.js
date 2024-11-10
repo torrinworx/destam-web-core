@@ -4,27 +4,34 @@ import { OObject, OArray } from 'destam';
 import ODB from '../odb.js';
 
 export default () => {
-    return {
-        authenticated: false,
-        init: async ({ msg }) => {
-            try {
-                const saltRounds = 10;
-                const salt = await bcryptjs.genSalt(saltRounds);
-                const hashedPassword = await bcryptjs.hash(msg.password, salt);
+	return {
+		authenticated: false,
+		init: async ({ msg }) => {
+			try {
+				if (msg.password.length < 10 && process.env.ENV === 'production') {
+					return { status: 'error', error: 'Password must be at least 10 characters long' };
+				}
 
-                // TODO: Check if user exists already before creating a new account:
+				const existingUser = await ODB('users', { email: msg.email });
+				if (existingUser) {
+					return { status: 'error', error: 'Email already in use' };
+				}
 
-                await ODB('users', {}, OObject({
-                    email: msg.email,
-                    password: hashedPassword,
-                    userID: crypto.randomUUID(),
-                    sessions: OArray([])
-                }));
+				const saltRounds = 10;
+				const salt = await bcryptjs.genSalt(saltRounds);
+				const hashedPassword = await bcryptjs.hash(msg.password, salt);
 
-                return { status: 'success' };
-            } catch (error) {
-                return { status: 'error', error: error };
-            }
-        },
-    };
+				await ODB('users', {}, OObject({
+					email: msg.email,
+					password: hashedPassword,
+					userID: crypto.randomUUID(),
+					sessions: OArray([])
+				}));
+
+				return { status: 'success' };
+			} catch (error) {
+				return { status: 'error', error: error };
+			}
+		},
+	};
 };

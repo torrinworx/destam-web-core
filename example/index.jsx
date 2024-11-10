@@ -5,7 +5,7 @@ import { Typography, TextField, Button } from 'destamatic-ui';
 // Setting the session token:
 
 const App = ({ state }) => {
-    // const email = state.client.observer.path('email').def('');
+    const error = Observer.mutable('');
     const email = Observer.mutable('');
     const password = Observer.mutable('');
 
@@ -31,26 +31,27 @@ const App = ({ state }) => {
             <TextField value={email} placeholder="Email" />
             <TextField value={password} placeholder="Password" />
         </div>
+        <Typography type='p1' style={{ color: 'red' }}>{error}</Typography>
         <Button
             type='contained'
             label='Signup'
             onMouseDown={async () => {
                 const response = await jobRequest('signup', { email: email.get(), password: password.get() });
-                console.log(response);
+                if (response.result.error) error.set(response.result.error);
             }}
         />
         <Button
             type='contained'
             label='Login'
             onMouseDown={async () => {
-                console.log("Attempting login")
                 const response = await jobRequest('login', { email: email.get(), password: password.get() });
-                console.log(response);
-
+                if (response.result.error) {
+                    error.set(response.result.error);
+                    return;
+                };
                 const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
                 const sessionToken = response.result.sessionToken;
                 document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
-
                 await jobRequest('sync');
             }}
         />

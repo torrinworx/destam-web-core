@@ -11,7 +11,7 @@ const connection = async (ws, req) => {
     let sync = await ODB('state', { userID: user.userID });
     if (!sync) {
         sync = await ODB('state', {}, OObject({
-            userID: userID,
+            userID: user.userID,
         }));
     }
 
