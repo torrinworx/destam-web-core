@@ -1,7 +1,7 @@
 import bcryptjs from 'bcryptjs';
 import { OObject, OArray } from 'destam';
 
-import ODB from '../../server/odb.js';
+import ODB from '../odb.js';
 
 export default () => {
     return {

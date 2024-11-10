@@ -1,31 +1,23 @@
-/* Core file that handles the ws connection and authentication.
+/*
+The base of web-core, managing server setup, initialization, and WebSocket connections for real-time state synchronization between clients and the server.
 
-This is the root of web-core.
+State Management:
+- state.client: State stored exclusively on the client, invisible to the server. This reduces unnecessary database updates.
+- state.sync: State synchronized between the server and clients. It is automatically transmitted via WebSocket and stored in a MongoDB document for users.
 
-No state stored within modules. All state that is needed can be stored in state.server
-There should be three states:
+Job Definition:
+- A job is defined as an object with properties such as `authenticated` and `init`.
+- By default, the `authenticated` property is true unless specified otherwise. It indicates whether authentication is required for the job.
+- The `init` function is an extensive function that handles the logic for each message received from a job.
 
-state.client => state stored on the client, server will never see this, soley on the client to prevent excessive database updates.
-state.sync => state that is synced between the server and the client, automatically passed through a websocket and stored in a mongodb document for users
+Connection Logic:
+- The `coreServer` function accepts a `connection()` function parameter.
+- This `connection()` function allows the execution of custom logic when a user establishes an authenticated connection.
+- It is triggered when `authenticated` becomes true for the first time during a connection. If authentication turns false, the connection is terminated.
 
-job definition:
-
-export default example = () => {
-    authenticated: true, // Default is always true if it's not declared.
-    init: (props) => { // Extensive function that allows you to react on each message received from job.
-        ...
-    },
-};
-
-coreServer will accept a connection() function, this function will allows you to run logic on a user makes an Authenticated connection.
-
-connection() gets ran when authenticated = true for the first time in the connection. If authenticated turns false, then it disconnects
-
-Philosophy with this is that:
-authentication of users is a core piece of web development so we might as well include this in the setup.
-
-This is opinionated.
-
+Philosophy:
+- The inclusion of user authentication as a core component of webcore is intentional.
+- This is opinionated, meant to simplify authentication concerns.
 */
 
 import fs from 'fs';
@@ -38,13 +30,10 @@ import { createNetwork } from 'destam';
 import { Observer, OObject } from 'destam-dom';
 import { createServer as createViteServer } from 'vite';
 
-import ODB from './db.js';
 import Jobs from './jobs.js';
-import { initDB } from './db.js';
+import ODB, { initDB } from './odb.js';
 import { parse, stringify } from './clone.js';
 
-// TODO: Might want to consider only authenticating once on login
-// rather than querying the db on every websocket request.
 const authenticate = async (sessionToken) => {
     if (sessionToken && sessionToken != 'null') {
         const user = await ODB('users', { "sessions": sessionToken });
@@ -54,6 +43,14 @@ const authenticate = async (sessionToken) => {
     }
 };
 
+/**
+ * Sets up a synced observer with the client and db. Synchronizes changes from
+ * the client/server and updates through WebSocket connection.
+ * @param {Object} authenticated - An object that tracks user authentication status.
+ * @param {WebSocket} ws - The WebSocket connection instance.
+ * @param {OObject} [sync=OObject({})] - An observable object to sync.
+ * @returns {OObject} - The synced observable object.
+ */
 const syncNetwork = (authenticated, ws, sync = OObject({})) => {
     let network = createNetwork(sync.observer);
     const fromClient = {};
@@ -70,8 +67,6 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
     ws.on("message", async (msg) => {
         msg = parse(msg);
 
-        const status = await authenticate(msg.sessionToken)
-        authenticated.set(status);
         if (authenticated.get() && msg.name === 'sync') {
             // TODO: validate changes follow the validator/schema
             network.apply(parse(msg.clientChanges), fromClient);
@@ -85,7 +80,15 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
     return sync;
 };
 
+/**
+ * The core of web-core. It initializes the database, manages authentication
+ * watch processes, and handles WebSocket connections with clients.
+ * @param {Object} server - The HTTP server instance.
+ * @param {string} jobs_dir - The directory of job definitions.
+ * @param {Function} connection - A function executed when a user makes an authenticated connection.
+ */
 const core = async (server, jobs_dir, connection) => {
+    await initDB();
     const wss = new WebSocketServer({ server });
     const jobs = await Jobs(jobs_dir);
 
@@ -100,7 +103,6 @@ const core = async (server, jobs_dir, connection) => {
                     if (connection) {
                         connectionProps = await connection(ws, req);
 
-                        // syncnetwork will only activate if the user wants it to.
                         if (connectionProps && connectionProps.sync) {
                             sync = connectionProps.sync;
                             syncNetwork(authenticated, ws, sync);
@@ -118,8 +120,11 @@ const core = async (server, jobs_dir, connection) => {
 
         ws.on('message', async msg => {
             msg = parse(msg);
-            const status = await authenticate(msg.sessionToken);
-            authenticated.set(status);
+
+            if (!authenticated.get() && msg.sessionToken) {
+                const status = await authenticate(msg.sessionToken);
+                authenticated.set(status);
+            }
 
             if (msg.name === 'sync') return;
 
@@ -150,6 +155,18 @@ const core = async (server, jobs_dir, connection) => {
     });
 };
 
+
+/**
+ * Sets up an Express-based server capable of working with the web-core
+ * structure and integrates Vite during development for HMR support.
+ * 
+ * In the future we might want to make this some kind of optional thing
+ * incase people want to use other servers, core doesn't really need to rely
+ * on a specific server to run.
+ * 
+ * @param {string} jobs_dir - The directory, or list of directories, of job definitions.
+ * @param {Function} connection - A function executed when a user makes an authenticated connection.
+ */
 const coreServer = async (jobs_dir, connection) => {
     const app = express();
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -182,7 +199,6 @@ const coreServer = async (jobs_dir, connection) => {
         });
     }
 
-    await initDB();
     await core(app.listen(process.env.PORT || 3000, () => { }), jobs_dir, connection);
 };
 
