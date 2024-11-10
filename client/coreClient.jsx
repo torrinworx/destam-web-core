@@ -20,7 +20,11 @@ export const initWS = () => {
         ? `ws://${window.location.hostname}:${window.location.port}/?sessionToken=${encodeURIComponent(tokenValue)}`
         : `ws://${window.location.hostname}:${window.location.port}`;
     ws = new WebSocket(wsURL);
-    return ws;
+    return new Promise((resolve, reject) => {
+        ws.addEventListener('open', () => resolve(ws));
+        ws.addEventListener('error', (err) => reject(err));
+        ws.addEventListener('close', () => console.warn('WebSocket closed unexpectedly.'));
+    });
 };
 
 export const jobRequest = (name, params) => {
@@ -63,7 +67,8 @@ export const syncNetwork = () => {
     // State is split in two: state.sync and state.client, this prevents
     // client only updates from needlessly updating the database.
     const state = OObject({
-        client: OObject({})
+        client: OObject({}),
+        sync: null
     });
     window.state = state;
 
@@ -114,8 +119,8 @@ export const syncNetwork = () => {
     return state
 };
 
-export const coreClient = (App, NotFound) => {
-    ws = initWS();
+export const coreClient = async (App, NotFound) => {
+    await initWS();
     const state = syncNetwork();
     mount(document.body, window.location.pathname === '/' ? <App state={state} /> : <NotFound />);
 };

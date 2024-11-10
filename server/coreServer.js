@@ -54,7 +54,6 @@ const authenticate = async (sessionToken) => {
 const syncNetwork = (authenticated, ws, sync = OObject({})) => {
     let network = createNetwork(sync.observer);
     const fromClient = {};
-
     ws.send(JSON.stringify({ name: 'sync', result: stringify(sync) }));
 
     network.digest(async (changes, observerRefs) => {
@@ -67,9 +66,11 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
     ws.on("message", async (msg) => {
         msg = parse(msg);
 
-        if (authenticated.get() && msg.name === 'sync' && msg.clientChanges) {
-            // TODO: validate changes follow the validator/schema
-            network.apply(parse(msg.clientChanges), fromClient);
+        if (authenticated.get() && msg.name === 'sync') {
+            if (msg.clientChanges) {
+                // TODO: validate changes follow the validator/schema
+                network.apply(parse(msg.clientChanges), fromClient);
+            }
         }
     });
 
