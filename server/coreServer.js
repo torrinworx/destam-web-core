@@ -95,19 +95,19 @@ const core = async (server, jobs_dir, connection) => {
 
     wss.on('connection', async (ws, req) => {
         let sync;
+        let user;
         let connectionProps;
+        const sessionToken = Observer.mutable('');
         const authenticated = Observer.mutable(false);
 
         authenticated.watch(d => {
             if (d.value) {
                 (async () => {
                     if (connection) {
-                        connectionProps = await connection(ws, req);
-
-                        if (connectionProps && connectionProps.sync) {
-                            sync = connectionProps.sync;
-                            syncNetwork(authenticated, ws, sync);
-                        }
+                        connectionProps = await connection(ws, req, sessionToken);
+                        user = await ODB('users', { "sessions": sessionToken.get() });                    
+                        sync = await ODB('state', { userID: user.userID });
+                        syncNetwork(authenticated, ws, sync);
                     }
                 })();
             } else if (sync) {
@@ -115,15 +115,16 @@ const core = async (server, jobs_dir, connection) => {
             }
         });
 
-        const sessionToken = new URLSearchParams(req.url.split('?')[1]).get('sessionToken');
-        const status = await authenticate(sessionToken)
+        sessionToken.set(new URLSearchParams(req.url.split('?')[1]).get('sessionToken'));
+        const status = await authenticate(sessionToken.get());
         authenticated.set(status);
 
         ws.on('message', async msg => {
             msg = parse(msg);
 
             if (!authenticated.get() && msg.sessionToken) {
-                const status = await authenticate(msg.sessionToken);
+                sessionToken.set(msg.sessionToken);
+                const status = await authenticate(sessionToken.get());
                 authenticated.set(status);
             }
 
@@ -141,11 +142,11 @@ const core = async (server, jobs_dir, connection) => {
             }
 
             try {
-                const { sync, ...otherProps } = connectionProps || {};
                 const result = await job.init({
                     msg,
                     sync: job.authenticated ? sync : undefined,
-                    ...otherProps
+                    user: job.authenticated ? user : undefined,
+                    ...connectionProps
                 });
 
                 ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));

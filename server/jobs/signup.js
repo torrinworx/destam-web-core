@@ -21,12 +21,17 @@ export default () => {
 				const salt = await bcryptjs.genSalt(saltRounds);
 				const hashedPassword = await bcryptjs.hash(msg.password, salt);
 
+				const userID = crypto.randomUUID();
 				await ODB('users', {}, OObject({
 					email: msg.email,
 					password: hashedPassword,
-					userID: crypto.randomUUID(),
+					userID: userID,
 					sessions: OArray([])
 				}));
+
+				await ODB('state', {}, OObject({
+					userID: userID,
+				}))
 
 				return { status: 'success' };
 			} catch (error) {
