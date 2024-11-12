@@ -3,7 +3,9 @@ TODO: This could be strucutred a bit neater imo to allow for more flexibilitiy w
 */
 
 import { mount } from 'destam-dom';
+import { v4 as uuidv4 } from 'uuid';
 import { OObject, createNetwork } from 'destam';
+
 import { parse, stringify } from '../common/clone.js';
 
 export const getCookie = (name) => {
@@ -29,7 +31,7 @@ export const initWS = () => {
 
 export const jobRequest = (name, params) => {
     return new Promise((resolve, reject) => {
-        const msgID = crypto.randomUUID();
+        const msgID = uuidv4();
 
         const handleMessage = (event) => {
             try {

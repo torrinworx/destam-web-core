@@ -1,4 +1,5 @@
 import bcryptjs from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 import { OObject, OArray } from 'destam';
 
 import ODB from '../odb.js';
@@ -21,7 +22,7 @@ export default () => {
 				const salt = await bcryptjs.genSalt(saltRounds);
 				const hashedPassword = await bcryptjs.hash(msg.password, salt);
 
-				const userID = crypto.randomUUID();
+				const userID = uuidv4();
 				await ODB('users', {}, OObject({
 					email: msg.email,
 					password: hashedPassword,
