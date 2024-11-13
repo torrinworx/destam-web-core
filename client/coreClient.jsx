@@ -18,9 +18,10 @@ let ws;
 
 export const initWS = () => {
     const tokenValue = getCookie('webCore') || '';
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     const wsURL = tokenValue
-        ? `ws://${window.location.hostname}:${window.location.port}/?sessionToken=${encodeURIComponent(tokenValue)}`
-        : `ws://${window.location.hostname}:${window.location.port}`;
+        ? `${protocol}${window.location.hostname}:${window.location.port}/?sessionToken=${encodeURIComponent(tokenValue)}`
+        : `${protocol}${window.location.hostname}:${window.location.port}`;
     ws = new WebSocket(wsURL);
     return new Promise((resolve, reject) => {
         ws.addEventListener('open', () => resolve(ws));
@@ -28,6 +29,7 @@ export const initWS = () => {
         ws.addEventListener('close', () => console.warn('WebSocket closed unexpectedly.'));
     });
 };
+
 
 export const jobRequest = (name, params) => {
     return new Promise((resolve, reject) => {
