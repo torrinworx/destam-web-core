@@ -169,17 +169,15 @@ const core = async (server, jobs_dir, connection) => {
  * @param {string} jobs_dir - The directory, or list of directories, of job definitions.
  * @param {Function} connection - A function executed when a user makes an authenticated connection.
  */
-const coreServer = async (jobs_dir, build_dir, connection) => {
+const coreServer = async (jobs_dir, root, connection) => {
     const app = express();
 
-    console.log('Build directory:', build_dir);
-
     if (process.env.ENV === 'production') {
-        app.use(express.static(build_dir));
-        console.log('Serving from:', path.join(build_dir, 'index.html'));
+        app.use(express.static(root));
+        console.log('Serving from:', path.join(root, 'index.html'));
 
         app.get('*', (req, res) => {
-            res.sendFile(path.join(build_dir, 'index.html'), err => {
+            res.sendFile(path.join(root, 'index.html'), err => {
                 if (err) {
                     res.status(500).send(err);
                     console.error('Error serving index.html:', err);
@@ -196,7 +194,7 @@ const coreServer = async (jobs_dir, build_dir, connection) => {
                 const html = await vite.transformIndexHtml(
                     req.originalUrl,
                     fs.readFileSync(
-                        path.resolve(__dirname, 'index.html'),
+                        path.resolve(root, 'index.html'),
                         'utf-8'
                     )
                 );
