@@ -30,9 +30,8 @@ export const initWS = () => {
     });
 };
 
-
 export const jobRequest = (name, params) => {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         const msgID = uuidv4();
 
         const handleMessage = (event) => {
@@ -47,19 +46,26 @@ export const jobRequest = (name, params) => {
             }
         };
 
-        ws.addEventListener('message', handleMessage);
+        const sendMessage = () => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    name: name,
+                    sessionToken: getCookie('webCore') || '',
+                    id: msgID,
+                    ...params
+                }));
+            } else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+                ws.removeEventListener('message', handleMessage);
+                ws = initWS()
+                    .then(() => sendMessage())
+                    .catch(err => reject(new Error('WebSocket could not be re-opened: ' + err.message)));
+            } else {
+                reject(new Error('WebSocket is not open. Ready state is: ' + ws.readyState));
+            }
+        };
 
-        if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                name: name,
-                sessionToken: getCookie('webCore') || '',
-                id: msgID,
-                ...params
-            }));
-        } else {
-            ws.removeEventListener('message', handleMessage);
-            reject(new Error('WebSocket is not open. Ready state is: ' + ws.readyState));
-        }
+        ws.addEventListener('message', handleMessage);
+        sendMessage();
     });
 };
 
