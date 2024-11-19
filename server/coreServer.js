@@ -104,9 +104,9 @@ const core = async (server, jobs_dir, connection) => {
             if (d.value) {
                 (async () => {
                     if (connection) {
-                        connectionProps = await connection(ws, req, sessionToken);
                         user = await ODB('users', { "sessions": sessionToken.get() });
                         sync = await ODB('state', { userID: user.userID });
+                        connectionProps = await connection(ws, req, user, sync, sessionToken);
                         syncNetwork(authenticated, ws, sync);
                     }
                 })();
