@@ -1,5 +1,5 @@
 import { OObject } from "destam-dom";
-import ODB, { initODB } from "./index.js";
+import { ODB, initODB } from "./index.js";
 
 const main = async () => {
     await initODB();

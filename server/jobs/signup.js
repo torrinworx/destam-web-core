@@ -2,7 +2,7 @@ import bcryptjs from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { OObject, OArray } from 'destam';
 
-import ODB from '../odb.js';
+import { ODB } from '../../common/index.js';
 
 export default () => {
 	return {
@@ -13,7 +13,7 @@ export default () => {
 					return { status: 'error', error: 'Password must be at least 10 characters long' };
 				}
 
-				const existingUser = await ODB('users', { email: msg.email });
+				const existingUser = await ODB('mongodb', 'users', { email: msg.email });
 				if (existingUser) {
 					return { status: 'error', error: 'Email already in use' };
 				}
@@ -23,14 +23,14 @@ export default () => {
 				const hashedPassword = await bcryptjs.hash(msg.password, salt);
 
 				const userID = uuidv4();
-				await ODB('users', {}, OObject({
+				await ODB('mongodb', 'users', {}, OObject({
 					email: msg.email,
 					password: hashedPassword,
 					userID: userID,
 					sessions: OArray([])
 				}));
 
-				await ODB('state', {}, OObject({
+				await ODB('mongodb', 'state', {}, OObject({
 					userID: userID,
 				}))
 

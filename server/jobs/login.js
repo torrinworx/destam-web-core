@@ -1,14 +1,14 @@
 import bcryptjs from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
-import ODB from '../odb.js';
+import { ODB } from '../../common/index.js';
 
 export default () => {
     return {
         authenticated: false,
         init: async ({ msg }) => {
             try {
-                const user = await ODB('users', { 'email': msg.email });
+                const user = await ODB('mongodb', 'users', { 'email': msg.email });
                 if (user) {
                     const validPassword = await bcryptjs.compare(msg.password, user.password);
                     if (validPassword) {

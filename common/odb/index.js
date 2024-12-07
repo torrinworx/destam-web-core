@@ -17,6 +17,7 @@ Each driver has a set of functions:
 init() => initializes the individual ODB instances that is used within the application.
 update() => Takes a document id and updates it to the provided value.
 */
+import { OObject } from "destam";
 import { parse } from "../clone.js";
 
 let drivers = {
@@ -53,7 +54,6 @@ export const initODB = async () => {
             console.warn(`Driver for ${driverName} wasn't mounted: ${error.message}. If you need this driver, check its setup is correct.`);
         }
     }
-    console.log('Final drivers object:', drivers);
 };
 
 /*
@@ -65,7 +65,7 @@ collection: collection name to search for the document.
 query: query to search for the correct document within the specified collection.
 value: the default value of the doucment if no query is specified and creating a new document.
 */
-const ODB = async (driver, collection, query, value = OObject({})) => {
+export const ODB = async (driver, collection, query, value = OObject({})) => {
     driver = drivers[driver]
 
     const { state_tree, id } = await driver.init(collection, query, value)
@@ -77,5 +77,3 @@ const ODB = async (driver, collection, query, value = OObject({})) => {
 
     return state;
 };
-
-export default ODB;

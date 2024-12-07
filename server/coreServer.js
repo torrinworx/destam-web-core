@@ -22,7 +22,6 @@ Philosophy:
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -31,12 +30,12 @@ import { Observer, OObject } from 'destam-dom';
 import { createServer as createViteServer } from 'vite';
 
 import Jobs from './jobs.js';
-import ODB, { initDB } from './odb.js';
+import { ODB, initODB } from '../common/index.js';
 import { parse, stringify } from '../common/clone.js';
 
 const authenticate = async (sessionToken) => {
     if (sessionToken && sessionToken != 'null') {
-        const user = await ODB('users', { "sessions": sessionToken });
+        const user = await ODB('mongodb', 'users', { "sessions": sessionToken });
 
         if (user) return true
         else return false
@@ -89,7 +88,7 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
  * @param {Function} connection - A function executed when a user makes an authenticated connection.
  */
 const core = async (server, jobs_dir, connection) => {
-    await initDB();
+    await initODB();
     const wss = new WebSocketServer({ server });
     const jobs = await Jobs(jobs_dir);
 
@@ -104,8 +103,8 @@ const core = async (server, jobs_dir, connection) => {
             if (d.value) {
                 (async () => {
                     if (connection) {
-                        user = await ODB('users', { "sessions": sessionToken.get() });
-                        sync = await ODB('state', { userID: user.userID });
+                        user = await ODB('mongodb', 'users', { "sessions": sessionToken.get() });
+                        sync = await ODB('mongodb', 'state', { userID: user.userID });
                         connectionProps = await connection(ws, req, user, sync, sessionToken);
                         syncNetwork(authenticated, ws, sync);
                     }
