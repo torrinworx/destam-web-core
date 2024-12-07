@@ -29,7 +29,10 @@ let drivers = {
 // init the an ODB given the driver found in ./drivers that matches ./drivers/<driver>.js and run it's init() function.
 // Dynamically imports a driver from the ./drivers folder
 
-// Initializes all available drivers
+// Determines the environment: true for client, false for server
+const isClient = typeof window !== 'undefined';
+
+// Initializes appropriate drivers based on the environment
 export const initODB = async () => {
     for (const driverName in drivers) {
         try {
@@ -42,8 +45,12 @@ export const initODB = async () => {
                         driverInstance = await driverInstance;
                     }
 
-                    drivers[driverName] = driverInstance;
-                    console.log(`${driverName} driver mounted.`);
+                    const driverType = driverInstance.type;
+                    if ((isClient && driverType === "client") || (!isClient && driverType === "server")) {
+                        const { type, ...driverMethods } = driverInstance;
+                        drivers[driverName] = driverMethods;
+                        console.log(`${driverName} driver mounted.`);
+                    }
                 } else {
                     throw new Error('No default export found.');
                 }

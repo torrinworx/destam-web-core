@@ -45,6 +45,7 @@ export default async () => {
 	const dbName = 'webcore';
 
 	return {
+        type: 'client',
 		init: async (collectionName, query, value) => {
 			const db = await openDB(dbName, 1, collectionName);
 			let dbDocument;

@@ -47,6 +47,7 @@ export default async () => {
     const db = dbClient.db('webcore');
 
     return {
+        type: 'server',
         /*
         init():
         Takes in generic collectionName and maps it to mongodb collections.
