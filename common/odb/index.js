@@ -74,13 +74,15 @@ value: the default value of the doucment if no query is specified and creating a
 */
 export const ODB = async (driver, collection, query, value = OObject({})) => {
     driver = drivers[driver]
-
     const { state_tree, id } = await driver.init(collection, query, value)
-    const state = parse(JSON.stringify(state_tree));
 
-    state.observer.watch(async () => {
-        await driver.update(collection, id, state)
-    });
-
-    return state;
+    if (state_tree) {
+        const state = parse(JSON.stringify(state_tree));
+    
+        state.observer.watch(async () => {
+            await driver.update(collection, id, state)
+        });
+    
+        return state;
+    } else return false;
 };

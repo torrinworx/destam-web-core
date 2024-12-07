@@ -131,7 +131,8 @@ export const coreClient = async (App, NotFound) => {
     // client only updates from needlessly updating the database.
     const state = OObject({
         sync: syncNetwork(),
-        client: await ODB('indexeddb', 'web-core')
+        client: OObject({})
+        // client: await ODB('indexeddb', 'web-core')
     })
 
     window.state = state;
