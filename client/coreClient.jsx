@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { OObject, createNetwork } from 'destam';
 
 import { parse, stringify } from '../common/clone.js';
+import { initODB } from '../common/index.js';
 
 export const getCookie = (name) => {
     const value = `; ${document.cookie}`;
@@ -131,6 +132,8 @@ export const syncNetwork = () => {
 
 export const coreClient = async (App, NotFound) => {
     await initWS();
+    await initODB();
+
     const state = syncNetwork();
     mount(document.body, window.location.pathname === '/' ? <App state={state} /> : <NotFound />);
 };

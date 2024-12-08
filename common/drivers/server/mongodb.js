@@ -44,7 +44,6 @@ export default async () => {
     const db = dbClient.db('webcore');
 
     return {
-        type: 'server',
         /*
         init():
         Takes in generic collectionName and maps it to mongodb collections.
@@ -55,7 +54,6 @@ export default async () => {
         - If no query is provided, a new document is created with the given value.
         */
         init: async (collectionName, query, value) => {
-            console.log(collectionName, query, value)
             let dbDocument;
             const collection = db.collection(collectionName);
             const transformedQuery = Object.keys(query).length === 0 ? query : transformQueryKeys(query);
