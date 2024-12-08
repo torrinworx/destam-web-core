@@ -1,5 +1,5 @@
 import fs from 'fs';
-import OFile from "./OFile.js";
+import OFile from "../server/OFile.js";
 import Path from 'path';
 import { Observer } from 'destam';
 

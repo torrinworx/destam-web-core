@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import ODir from './ODir.js';
+import ODir from '../server/ODir.js';
 
 const testDirPath = path.resolve('./test-dir');
 if (!fs.existsSync(testDirPath)) {
