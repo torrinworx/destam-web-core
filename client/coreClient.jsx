@@ -79,24 +79,23 @@ export const syncNetwork = async () => {
     // client only updates from needlessly updating the database.
 
     // For some reason using ODB hsers is causing it to hang and not properly log the user in.
-    // let client = await ODB('indexeddb', 'client', { state: 'client' });
-    // if (!client) {
-    //     client = await ODB('indexeddb', 'client', {}, OObject({ state: 'client'}))
-    // }
+    let client = await ODB('indexeddb', 'client', { state: 'client' });
+    if (!client) {
+        client = await ODB('indexeddb', 'client', {}, OObject({ state: 'client'}))
+    }
 
     const state = OObject({
-        client: OObject({}),
-        // client: client,
+        client: client,
         sync: null
     });
     window.state = state;
 
     ws.addEventListener('message', (msg) => {
-        const data = parse(msg.data);
+        msg = parse(msg.data);
 
         // look for sync here because other data is returned from the server for jobRequest:
-        if (data.name === 'sync') {
-            const serverChanges = parse(data.result);
+        if (msg.name === 'sync') {
+            const serverChanges = parse(msg.result);
             if (!state.sync) {
                 if (!Array.isArray(serverChanges)) {
                     state.sync = serverChanges; // Clone of OServer

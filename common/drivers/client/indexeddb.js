@@ -85,7 +85,6 @@ export default async () => {
 					return false;
 				}
 			}
-			console.log(dbDocument)
 
 			return { state_tree: dbDocument.state_tree, id: dbDocument._id };
 		},
