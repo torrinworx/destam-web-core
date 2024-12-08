@@ -6,7 +6,6 @@ import { mount } from 'destam-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { OObject, createNetwork } from 'destam';
 
-import { initODB, ODB } from '../common/index.js';
 import { parse, stringify } from '../common/clone.js';
 
 export const getCookie = (name) => {
@@ -71,10 +70,17 @@ export const jobRequest = (name, params) => {
 };
 
 export const syncNetwork = () => {
-    let sync;
     let remove;
     let network;
     const fromServer = {};
+
+    // State is split in two: state.sync and state.client, this prevents
+    // client only updates from needlessly updating the database.
+    const state = OObject({
+        client: OObject({}),
+        sync: null
+    });
+    window.state = state;
 
     ws.addEventListener('message', (msg) => {
         const data = parse(msg.data);
@@ -82,10 +88,10 @@ export const syncNetwork = () => {
         // look for sync here because other data is returned from the server for jobRequest:
         if (data.name === 'sync') {
             const serverChanges = parse(data.result);
-            if (!sync) {
+            if (!state.sync) {
                 if (!Array.isArray(serverChanges)) {
-                    sync = serverChanges; // Clone of OServer
-                    network = createNetwork(sync.observer);
+                    state.sync = serverChanges; // Clone of OServer
+                    network = createNetwork(state.sync.observer);
 
                     network.digest(async (changes, observerRefs) => {
                         const clientChanges = stringify(
@@ -120,22 +126,11 @@ export const syncNetwork = () => {
         console.error('WebSocket error:', error.message);
     });
 
-    return sync
+    return state
 };
 
 export const coreClient = async (App, NotFound) => {
     await initWS();
-    await initODB();
-
-    // State is split in two: state.sync and state.client, this prevents
-    // client only updates from needlessly updating the database.
-    const state = OObject({
-        sync: syncNetwork(),
-        client: OObject({})
-        // client: await ODB('indexeddb', 'web-core')
-    })
-
-    window.state = state;
-
+    const state = syncNetwork();
     mount(document.body, window.location.pathname === '/' ? <App state={state} /> : <NotFound />);
 };
