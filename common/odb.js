@@ -1,11 +1,10 @@
-// Serves as a data storage abstraction with multiple methods of storing observers
 /*
-ODB supports storage, and querying of data. 
+Serves as a data storage abstraction with multiple methods of storing observers, ODB supports storage,
+and querying of data. ODB has collections, each collection contains a list of documents. These documents
+contain the data you wish to store.
 
-ODB has collections, each collection contains a list of documents. These documents contain the data you wish to store.
-
-Each document has it's own uuid. This is included in the document stored in the drivers method regardless of it's underlying tracking methods,
-this is for concistency accross driver methods.
+Each document has it's own uuid. This is included in the document stored in the drivers method regardless
+of it's underlying tracking methods, this is for concistency accross driver methods.
 
 db types:
 - mongodb => wrapper for mongodb
@@ -77,11 +76,9 @@ export const ODB = async (driver, collection, query, value = OObject({})) => {
 
 	if (state_tree) {
 		const state = parse(JSON.stringify(state_tree));
-
 		state.observer.watch(async () => {
 			await driver.update(collection, id, state)
 		});
-
 		return state;
 	} else return false;
 };

@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { OObject, createNetwork } from 'destam';
 
 import { parse, stringify } from '../common/clone.js';
-import { initODB } from '../common/index.js';
+import { initODB, ODB } from '../common/index.js';
 
 export const getCookie = (name) => {
     const value = `; ${document.cookie}`;
@@ -70,15 +70,23 @@ export const jobRequest = (name, params) => {
     });
 };
 
-export const syncNetwork = () => {
+export const syncNetwork = async () => {
     let remove;
     let network;
     const fromServer = {};
 
     // State is split in two: state.sync and state.client, this prevents
     // client only updates from needlessly updating the database.
+
+    // For some reason using ODB hsers is causing it to hang and not properly log the user in.
+    // let client = await ODB('indexeddb', 'client', { state: 'client' });
+    // if (!client) {
+    //     client = await ODB('indexeddb', 'client', {}, OObject({ state: 'client'}))
+    // }
+
     const state = OObject({
         client: OObject({}),
+        // client: client,
         sync: null
     });
     window.state = state;
@@ -133,7 +141,37 @@ export const syncNetwork = () => {
 export const coreClient = async (App, NotFound) => {
     await initWS();
     await initODB();
+    const state = await syncNetwork();
 
-    const state = syncNetwork();
+    const token = getCookie('webCore') || '';
+    if (token) {
+        (async () => await jobRequest('sync'))();
+        state.client.observer.path('openPage').set({ page: "Auth" })
+    };
+
+    state.login = async ({ email, password }) => {
+		const response = await jobRequest('login', { email: email.get(), password: password.get() });
+
+        if (response.result.status === 'success') {
+			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+			const sessionToken = response.result.sessionToken;
+			document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
+
+			// TODO For some reason it gets stuck here and doesn't load the home page/state.sync:
+			console.log("Login, initializing sync...")
+			const response2 = await jobRequest('sync'); // Collision occurs here
+			console.log(response2)
+			loading.set(false)
+		}
+
+		return response;
+    }
+
+    state.signup = async ({ email, password }) => {
+		const response = await jobRequest('signup', { email: email.get(), password: password.get() });
+
+		return response;
+	};
+
     mount(document.body, window.location.pathname === '/' ? <App state={state} /> : <NotFound />);
 };
