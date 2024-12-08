@@ -156,7 +156,6 @@ const core = async (server, jobs_dir, connection) => {
     });
 };
 
-
 /**
  * Sets up an Express-based server capable of working with the web-core
  * structure and integrates Vite during development for HMR support.
@@ -210,6 +209,5 @@ const coreServer = async (jobs_dir, root, connection) => {
         console.log(`Server on http://localhost:${process.env.PORT || 3000}/`);
     }), jobs_dir, connection);
 };
-
 
 export default coreServer;
