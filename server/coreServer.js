@@ -66,6 +66,8 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
         msg = parse(msg);
 
         if (authenticated.get() && msg.name === 'sync') {
+            ws.send(JSON.stringify({ name: 'sync', result: stringify(sync) }));
+
             if (msg.clientChanges) {
                 // TODO: validate changes follow the validator/schema
                 network.apply(parse(msg.clientChanges), fromClient);
