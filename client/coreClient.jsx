@@ -75,15 +75,16 @@ export const syncNetwork = async () => {
     let network;
     const fromServer = {};
 
-    // State is split in two: state.sync and state.client, this prevents
-    // client only updates from needlessly updating the database.
-
-    // For some reason using ODB hsers is causing it to hang and not properly log the user in.
+    // TODO: move client state creation to core() function instead.
+    // Client is an ODB driver running indexeddb so that changes to client state
+    // are maintained accross page reloads with a similar permanence to cookies.
     let client = await ODB('indexeddb', 'client', { state: 'client' });
     if (!client) {
         client = await ODB('indexeddb', 'client', {}, OObject({ state: 'client'}))
     }
 
+    // State is split in two: state.sync and state.client, this prevents
+    // client only updates from needlessly updating the database.
     const state = OObject({
         client: client,
         sync: null
