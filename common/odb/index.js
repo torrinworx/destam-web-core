@@ -80,6 +80,7 @@ export const ODB = async (driver, collection, query, value = OObject({})) => {
         const state = parse(JSON.stringify(state_tree));
     
         state.observer.watch(async () => {
+            console.log(state)
             await driver.update(collection, id, state)
         });
     

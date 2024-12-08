@@ -1,6 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
 import { config } from 'dotenv';
-import { OObject } from 'destam';
 import { MongoClient } from 'mongodb';
 
 import { stringify } from '../../clone.js';
@@ -12,9 +10,8 @@ config();
  * @param {Object} value - The observer state value.
  * @returns {Object} The document containing a state tree and its simplified JSON version used for querying.
  */
-const createStateDoc = (wcid, value) => {
+const createStateDoc = (value) => {
     return {
-        wcid: wcid,
         state_tree: JSON.parse(stringify(value)),
         state_json: JSON.parse(JSON.stringify(value))
     };
@@ -58,14 +55,14 @@ export default async () => {
         - If no query is provided, a new document is created with the given value.
         */
         init: async (collectionName, query, value) => {
+            console.log(collectionName, query, value)
             let dbDocument;
             const collection = db.collection(collectionName);
             const transformedQuery = Object.keys(query).length === 0 ? query : transformQueryKeys(query);
 
             // No query, create doc
             if (Object.keys(transformedQuery).length === 0) {
-                const wcid = uuidv4();
-                const stateDoc = createStateDoc(wcid, value);
+                const stateDoc = createStateDoc(value);
                 const result = await collection.insertOne(stateDoc);
                 dbDocument = {
                     _id: result.insertedId,
@@ -83,12 +80,12 @@ export default async () => {
         update():
         Takes in generic collectionName and maps it to mongodb collections.
         */
-        update: async (collectionName, wcid, state) => {
+        update: async (collectionName, id, state) => {
             const collection = db.collection(collectionName);
             const result = await collection.updateOne(
-                { wcid: wcid }, // Update document with coresponding wcid.
+                { _id: id },
                 {
-                    $set: createStateDoc(wcid, state)
+                    $set: createStateDoc(state)
                 }
             );
             return result;
