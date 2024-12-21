@@ -16,8 +16,8 @@ Each driver has a set of functions:
 init() => initializes the individual ODB instances that is used within the application.
 update() => Takes a document id and updates it to the provided value.
 */
-import { OObject } from "destam";
-import { parse } from "./clone.js";
+import { OObject } from 'destam';
+import { parse } from './clone.js';
 
 const isClient = typeof window !== 'undefined';
 let drivers = isClient ? { indexeddb: {} } : { mongodb: {}, fs: {} };

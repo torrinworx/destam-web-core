@@ -10,13 +10,13 @@ import {assert} from 'destam/util.js';
 
 const wrap = (type, props) => {
 	return {
-		"OBJECT_TYPE": type,
+		'OBJECT_TYPE': type,
 		...props,
 	};
 }
 
 const encodeEvent = (value, name, encodeValue) => {
-	return wrap("observer_" + name, Object.fromEntries(encodeValue.map(name => {
+	return wrap('observer_' + name, Object.fromEntries(encodeValue.map(name => {
 		let val = value[name];
 
 		if (name === 'time') {
@@ -41,7 +41,7 @@ export const stringify = (state, options) => {
 			if (!options?.observerRefs || !options.observerRefs(v[observerGetter])) {
 				return create();
 			} else {
-				return wrap("observer_ref", {id: v[observerGetter].id.toHex()});
+				return wrap('observer_ref', {id: v[observerGetter].id.toHex()});
 			}
 		};
 
@@ -60,7 +60,7 @@ export const stringify = (state, options) => {
 					});
 				}
 
-				return wrap("observer_array", {id: reg.id.toHex(), vals: out});
+				return wrap('observer_array', {id: reg.id.toHex(), vals: out});
 			});
 		} else if (value instanceof OObject) {
 			return getRef(value, () => {
@@ -74,7 +74,7 @@ export const stringify = (state, options) => {
 					});
 				}
 
-				return wrap("observer_object", {id: reg.id.toHex(), vals: out});
+				return wrap('observer_object', {id: reg.id.toHex(), vals: out});
 			});
 		} else if (value instanceof OMap) {
 			return getRef(value, () => {
@@ -86,14 +86,14 @@ export const stringify = (state, options) => {
 					out.push(item);
 				}
 
-				return wrap("observer_map", {id: reg.id.toHex(), vals: out});
+				return wrap('observer_map', {id: reg.id.toHex(), vals: out});
 			});
 		} else if (value instanceof Insert) {
-			return encodeEvent(value, "insert", ['id', 'value', 'ref', 'time']);
+			return encodeEvent(value, 'insert', ['id', 'value', 'ref', 'time']);
 		} else if (value instanceof Modify) {
-			return encodeEvent(value, "modify", ['id', 'value', 'ref', 'time']);
+			return encodeEvent(value, 'modify', ['id', 'value', 'ref', 'time']);
 		} else if (value instanceof Delete) {
-			return encodeEvent(value, "delete", ['id', 'ref', 'time']);
+			return encodeEvent(value, 'delete', ['id', 'ref', 'time']);
 		} else {
 			return value;
 		}
@@ -117,7 +117,7 @@ export const parse = (state, options) => {
 				if (o === 'OBJECT_TYPE') {
 					if (obj.OBJECT_TYPE === 'observer_ref') {
 						const obs = options?.observerNetwork?.get(UUID(obj.id));
-						assert(obs, "Could not find referenced id: " + obj.id);
+						assert(obs, 'Could not find referenced id: ' + obj.id);
 
 						refs.set(obj.id, obs);
 					} else if (constructors[obj.OBJECT_TYPE]) {
@@ -135,17 +135,17 @@ export const parse = (state, options) => {
 	walk(JSON.parse(state));
 
 	return JSON.parse(state, (key, value) => {
-		if (!(value && typeof value === 'object' && "OBJECT_TYPE" in value)) {
+		if (!(value && typeof value === 'object' && 'OBJECT_TYPE' in value)) {
 			return value;
 		}
 
 		if (value.OBJECT_TYPE === 'ref') {
 			const obj = refs.get(value.id.toHex());
-			assert(obj, "Could not find json ref: " + value.id.toHex());
+			assert(obj, 'Could not find json ref: ' + value.id.toHex());
 			return obj;
 		} else if (value.OBJECT_TYPE === 'observer_ref') {
 			const obs = options?.observerNetwork?.get(UUID(value.id));
-			assert(obs, "Could not find referenced id: " + value.id);
+			assert(obs, 'Could not find referenced id: ' + value.id);
 
 			return obs;
 		} else if (value.OBJECT_TYPE === 'uuid') {
@@ -211,10 +211,10 @@ export const parse = (state, options) => {
 			val.ref = value.ref;
 			val.time = value.time;
 			return val;
-		} else if (value.OBJECT_TYPE === "date") {
+		} else if (value.OBJECT_TYPE === 'date') {
 			return new Date(value.date);
 		} else {
-			assert(value.OBJECT_TYPE === 'observer_delete', "unknown object type");
+			assert(value.OBJECT_TYPE === 'observer_delete', 'unknown object type');
 			const val = Delete();
 			val.id = value.id;
 			val.ref = value.ref;

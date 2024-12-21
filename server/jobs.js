@@ -55,7 +55,7 @@ const Jobs = async (directories, props = {}) => {
 					if (typeof module.default === 'function') {
 						jobs.set(jobName, module.default);
 					}
-					console.log(`Job \x1b[36m"${jobName}"\x1b[0m loaded`);
+					console.log(`Job \x1b[36m'${jobName}'\x1b[0m loaded`);
 				} catch (e) {
 					console.error(`Failed to load module from ${filePath}:`, e);
 				}

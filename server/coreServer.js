@@ -35,7 +35,7 @@ import { parse, stringify } from '../common/clone.js';
 
 const authenticate = async (sessionToken) => {
     if (sessionToken && sessionToken != 'null') {
-        const user = await ODB('mongodb', 'users', { "sessions": sessionToken });
+        const user = await ODB('mongodb', 'users', { 'sessions': sessionToken });
 
         if (user) return true
         else return false
@@ -62,7 +62,7 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
         ws.send(JSON.stringify({ name: 'sync', result: serverChanges }));
     }, 1000 / 30, (arg) => arg === fromClient);
 
-    ws.on("message", async (msg) => {
+    ws.on('message', async (msg) => {
         msg = parse(msg);
 
         if (authenticated.get() && msg.name === 'sync') {
@@ -75,7 +75,7 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
         }
     });
 
-    ws.on("close", () => {
+    ws.on('close', () => {
         network.remove();
     });
 
@@ -105,7 +105,7 @@ const core = async (server, jobs_dir, connection) => {
             if (d.value) {
                 (async () => {
                     if (connection) {
-                        user = await ODB('mongodb', 'users', { "sessions": sessionToken.get() });
+                        user = await ODB('mongodb', 'users', { 'sessions': sessionToken.get() });
                         sync = await ODB('mongodb', 'state', { userID: user.userID });
                         connectionProps = await connection(ws, req, user, sync, sessionToken);
                         syncNetwork(authenticated, ws, sync);
@@ -152,7 +152,7 @@ const core = async (server, jobs_dir, connection) => {
 
                 ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
             } catch (error) {
-                console.error(`Error running job "${msg.name}":`, error);
+                console.error(`Error running job '${msg.name}':`, error);
             }
         });
     });

@@ -1,5 +1,5 @@
 import fs from 'fs';
-import OFile from "../server/OFile.js";
+import OFile from '../server/OFile.js';
 import Path from 'path';
 import { Observer } from 'destam';
 
@@ -18,9 +18,9 @@ testTXT.watch(d => {
 	console.log(d);
 });
 fs.writeFileSync(filePath, 'Edited content', 'utf8');
-console.log("From testTXT.get(): ", testTXT.get());
-testTXT.set("New test file content from testTXT.set()")
-console.log("From testTXT.get(): ", testTXT.get());
+console.log('From testTXT.get(): ', testTXT.get());
+testTXT.set('New test file content from testTXT.set()')
+console.log('From testTXT.get(): ', testTXT.get());
 
 fs.rm(filePath, (err) => {
 	if (err) console.error('Error deleting file:', err);

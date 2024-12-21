@@ -1,4 +1,4 @@
-import { stringify } from "../../clone";
+import { stringify } from '../../clone';
 
 export default async () => {
 	const dbName = 'webcore';
