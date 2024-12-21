@@ -12,7 +12,7 @@
         "start": "node ./example/server.js",
         "build": "npx vite build"
     },
-    "author": "Torrin Leonard",
+    "author": "Torrin Z. Leonard <torrin@worx4you.com> (https://torrinleonard.com/)",
     "license": "GPL-3.0",
     "dependencies": {
         "bcryptjs": "^2.4.3",

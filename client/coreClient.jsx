@@ -143,6 +143,8 @@ export const coreClient = async (App, NotFound) => {
 	await initODB();
 	const state = await syncNetwork();
 
+	if (!state.client.openPage) state.client.openPage = { page: "Landing" };
+
 	const token = getCookie('webCore') || '';
 	if (token) {
 		(async () => await jobRequest('sync'))();
