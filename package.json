@@ -1,5 +1,5 @@
 {
-    "name": "web-core",
+    "name": "@torrin-leonard/web-core",
     "version": "1.0.0",
     "exports": {
         ".": "./common/index.js",
