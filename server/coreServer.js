@@ -26,11 +26,11 @@ import path from 'path';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createNetwork } from 'destam';
+import { ODB, initODB } from 'destam-db-core';
 import { Observer, OObject } from 'destam-dom';
 import { createServer as createViteServer } from 'vite';
 
 import Jobs from './jobs.js';
-import { ODB, initODB } from '../common/index.js';
 import { parse, stringify } from '../common/clone.js';
 
 const authenticate = async (sessionToken) => {

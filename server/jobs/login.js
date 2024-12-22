@@ -1,7 +1,6 @@
 import bcryptjs from 'bcryptjs';
 import { randomUUID } from 'crypto';
-
-import { ODB } from '../../common/index.js';
+import { ODB } from 'destam-db-core';
 
 export default () => {
     return {

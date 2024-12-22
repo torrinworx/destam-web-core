@@ -1,8 +1,7 @@
 import bcryptjs from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import { ODB } from 'destam-db-core';
 import { OObject, OArray } from 'destam';
-
-import { ODB } from '../../common/index.js';
 
 export default () => {
 	return {

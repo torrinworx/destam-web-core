@@ -4,10 +4,10 @@ TODO: This could be strucutred a bit neater imo to allow for more flexibilitiy w
 
 import { mount } from 'destam-dom';
 import { v4 as uuidv4 } from 'uuid';
+import { ODB, initODB } from 'destam-db-core';
 import { OObject, createNetwork } from 'destam';
 
 import { parse, stringify } from '../common/clone.js';
-import { initODB, ODB } from '../common/index.js';
 
 export const getCookie = (name) => {
 	const value = `; ${document.cookie}`;
