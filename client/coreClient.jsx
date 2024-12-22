@@ -161,6 +161,10 @@ export const coreClient = async (App, NotFound) => {
 			const sessionToken = response.result.sessionToken;
 			document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
 
+			window.location.reload(); // temp work around for bellow issue:
+
+			// Ideally we would just do this and wait for sync but for some reason it's getting stuck here
+			// when the server first boots up and we do a login for the first time for in some weird states:
 			// TODO For some reason it gets stuck here and doesn't load the home page/state.sync:
 			console.log('Login, initializing sync...')
 			const response2 = await jobRequest('sync'); // Issue occurs here
