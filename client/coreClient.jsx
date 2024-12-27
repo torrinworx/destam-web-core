@@ -2,10 +2,10 @@
 TODO: This could be strucutred a bit neater imo to allow for more flexibilitiy when it comes to the sync stuff maybe?
 */
 
-import { mount, OObject} from 'destam-dom';
+import { mount } from 'destam-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ODB, initODB } from 'destam-db-core';
-import { createNetwork } from 'destam';
+import { OObject, createNetwork } from 'destam';
 
 import { parse, stringify } from '../common/clone.js';
 
