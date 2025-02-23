@@ -23,6 +23,7 @@ Philosophy:
 import fs from 'fs';
 import path from 'path';
 
+import 'dotenv/config';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createNetwork } from 'destam';
@@ -144,7 +145,7 @@ const core = async (server, jobs_dir, connection) => {
 
             try {
                 const result = await job.init({
-                    msg,
+                    ...msg,
                     sync: job.authenticated ? sync : undefined,
                     user: job.authenticated ? user : undefined,
                     ...connectionProps

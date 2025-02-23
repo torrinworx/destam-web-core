@@ -150,33 +150,25 @@ export const coreClient = async (App, NotFound) => {
 		(async () => await jobRequest('sync'))();
 		state.client.openPage = { page: 'Auth' }
 	} else {
-		state.client.openPage = { page: 'Landing'}
+		state.client.openPage = { page: 'Landing' }
 	};
 
-	state.login = async ({ email, password }) => {
-		const response = await jobRequest('login', { email: email.get(), password: password.get() });
-
+	state.enter = async (email, password) => {
+		const response = await jobRequest('enter', { email: email.get(), password: password.get() });
 		if (response.result.status === 'success') {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
 			const sessionToken = response.result.sessionToken;
 			document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
 
-			window.location.reload(); // temp work around for bellow issue:
-
-			// Ideally we would just do this and wait for sync but for some reason it's getting stuck here
-			// when the server first boots up and we do a login for the first time for in some weird states:
-			// TODO For some reason it gets stuck here and doesn't load the home page/state.sync:
-			console.log('Login, initializing sync...')
-			const response2 = await jobRequest('sync'); // Issue occurs here
-			console.log(response2)
+			window.location.reload();
 		}
 
 		return response;
-	}
+	};
 
-	state.signup = async ({ email, password }) => await jobRequest(
-		'signup',
-		{ email: email.get(), password: password.get() }
+	state.check = async (email) => await jobRequest(
+		'check',
+		{ email: email.get() }
 	);
 
 	mount(document.body, window.location.pathname === '/' ? <App state={state} /> : <NotFound />);
