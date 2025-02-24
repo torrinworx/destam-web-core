@@ -150,11 +150,14 @@ export const coreClient = async (App, NotFound) => {
 		(async () => await jobRequest('sync'))();
 		state.client.openPage = { page: 'Auth' }
 	} else {
-		state.client.openPage = { page: 'Landing' }
+		if (state.client.openPage.page != 'Auth') {
+			state.client.openPage = { page: 'Landing' }
+		}
 	};
 
 	state.enter = async (email, password) => {
 		const response = await jobRequest('enter', { email: email.get(), password: password.get() });
+		console.log(response);
 		if (response.result.status === 'success') {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
 			const sessionToken = response.result.sessionToken;
@@ -162,14 +165,12 @@ export const coreClient = async (App, NotFound) => {
 
 			window.location.reload();
 		}
+		window.location.reload();
 
 		return response;
 	};
 
-	state.check = async (email) => await jobRequest(
-		'check',
-		{ email: email.get() }
-	);
+	state.check = async (email) => await jobRequest('check', { email: email.get() });
 
 	mount(document.body, window.location.pathname === '/' ? <App state={state} /> : <NotFound />);
 };
