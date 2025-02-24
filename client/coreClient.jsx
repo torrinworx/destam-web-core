@@ -1,7 +1,3 @@
-/*
-TODO: This could be strucutred a bit neater imo to allow for more flexibilitiy when it comes to the sync stuff maybe?
-*/
-
 import { mount } from 'destam-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ODB, initODB } from 'destam-db-core';
@@ -157,7 +153,6 @@ export const coreClient = async (App, NotFound) => {
 
 	state.enter = async (email, password) => {
 		const response = await jobRequest('enter', { email: email.get(), password: password.get() });
-		console.log(response);
 		if (response.result.status === 'success') {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
 			const sessionToken = response.result.sessionToken;
