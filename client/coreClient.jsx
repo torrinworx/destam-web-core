@@ -23,7 +23,7 @@ export const initWS = () => {
 	return new Promise((resolve, reject) => {
 		ws.addEventListener('open', () => resolve(ws));
 		ws.addEventListener('error', (err) => reject(err));
-		ws.addEventListener('close', () => console.warn('WebSocket closed unexpectedly.'));
+		ws.addEventListener('close', () => {});
 	});
 };
 
@@ -124,7 +124,6 @@ export const syncNetwork = async () => {
 
 	ws.addEventListener('close', () => {
 		if (network) network.remove();
-		console.log('WebSocket connection closed.');
 	});
 
 	ws.addEventListener('error', (error) => {
