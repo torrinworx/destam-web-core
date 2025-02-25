@@ -27,7 +27,9 @@ const __dirname = path.dirname(__filename);
 
 const Jobs = async (directories, props = {}) => {
 	const jobs = new Map();
-	const directoryPaths = Array.isArray(directories) ? directories.map(dir => path.resolve(dir)) : [path.resolve(directories)];
+	const directoryPaths = Array.isArray(directories)
+		? directories.map(dir => path.resolve(dir))
+		: [path.resolve(directories)];
 	directoryPaths.push(path.resolve(__dirname, 'jobs'));
 
 	const findJobFiles = async dir => {
@@ -51,7 +53,7 @@ const Jobs = async (directories, props = {}) => {
 				try {
 					const module = await import(filePath);
 					const relativePath = path.relative(jobsDirectory, filePath);
-					const jobName = relativePath.replace(/[/\\]/g, '_').replace(/\.js$/, '');
+					const jobName = relativePath.replace(/[/\\]/g, '/').replace(/\.js$/, '');
 					if (typeof module.default === 'function') {
 						jobs.set(jobName, module.default);
 					}
@@ -69,11 +71,20 @@ const Jobs = async (directories, props = {}) => {
 	const jobHandlers = {};
 
 	for (const [jobName, jobFactory] of jobs.entries()) {
-		const jobInstance = jobFactory(props);
-		jobHandlers[jobName] = {
-			authenticated: jobInstance.authenticated !== undefined ? jobInstance.authenticated : true,
-			init: jobInstance.init || (() => { }),
-		};
+		try {
+			const jobInstance = await Promise.resolve(jobFactory(props));
+
+			if (typeof jobInstance !== 'object' || jobInstance === null) {
+				throw new TypeError(`Job factory for '${jobName}' did not return a valid object.`);
+			}
+
+			jobHandlers[jobName] = {
+				authenticated: jobInstance.authenticated !== undefined ? jobInstance.authenticated : true,
+				init: typeof jobInstance.init === 'function' ? jobInstance.init : () => { },
+			};
+		} catch (e) {
+			console.error(`Failed to initialize job '${jobName}':`, e);
+		}
 	}
 
 	return jobHandlers;
