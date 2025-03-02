@@ -1,14 +1,14 @@
 /**
  * Jobs Module
- * 
+ *
  * This module provides a function to load and initialize job modules from specified directory or directories, including a default
  * `./jobs` directory to load webcore jobs. It dynamically imports job modules, executes optional initialization logic, and creates
  * handlers for managing job execution.
- * 
+ *
  * @param {(string|string[])} directories - The directory path or an array of directory paths containing job module files.
  * @param {Object} [props={}] - An optional object of properties to be passed to each job instance.
  * @returns {Promise<Object>} A promise that resolves to an object containing job handlers.
- * 
+ *
  * Usage:
  *   1. Specify a directory or an array of directories containing job files.
  *   2. Each job file should export a default function that returns an object with:
@@ -46,23 +46,37 @@ const Jobs = async (directories, props = {}) => {
 		return files.flat().filter(Boolean);
 	};
 
+	let allJobFiles = [];
+	for (const directory of directoryPaths) {
+		const jobFiles = await findJobFiles(directory);
+		allJobFiles.push(
+			...jobFiles.map(filePath => ({ directory, filePath }))
+		);
+	}
+
+	const totalJobs = allJobFiles.length;
+	let loadedJobsCount = 0;
+
 	try {
-		for (let jobsDirectory of directoryPaths) {
-			const jobFiles = await findJobFiles(jobsDirectory);
-			await Promise.all(jobFiles.map(async filePath => {
+		await Promise.all(
+			allJobFiles.map(async ({ directory, filePath }) => {
 				try {
 					const module = await import(filePath);
-					const relativePath = path.relative(jobsDirectory, filePath);
+					const relativePath = path.relative(directory, filePath);
 					const jobName = relativePath.replace(/[/\\]/g, '/').replace(/\.js$/, '');
 					if (typeof module.default === 'function') {
 						jobs.set(jobName, module.default);
+						loadedJobsCount++;
+
+						// Update the same line for each successfully loaded job
+						process.stdout.write(`\r${loadedJobsCount}/${totalJobs} jobs loaded.`);
 					}
-					console.log(`Job \x1b[36m'${jobName}'\x1b[0m loaded`);
 				} catch (e) {
 					console.error(`Failed to load module from ${filePath}:`, e);
 				}
-			}));
-		}
+			})
+		);
+		process.stdout.write('\n');
 		console.log('All jobs loaded.');
 	} catch (error) {
 		console.error('Error loading jobs:', error);
