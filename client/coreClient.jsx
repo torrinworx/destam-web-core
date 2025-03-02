@@ -27,6 +27,8 @@ export const initWS = () => {
 	});
 };
 
+
+// todo: verbose mode that returns job name along with result
 export const jobRequest = (name, params) => {
 	return new Promise(async (resolve, reject) => {
 		const msgID = uuidv4();
@@ -36,7 +38,7 @@ export const jobRequest = (name, params) => {
 				const response = JSON.parse(event.data);
 				if (response.id === msgID) {
 					ws.removeEventListener('message', handleMessage);
-					resolve(response);
+					resolve(response.result);
 				}
 			} catch (error) {
 				console.error('Failed to parse incoming message:', error);
@@ -152,15 +154,11 @@ export const coreClient = async (App, NotFound) => {
 
 	state.enter = async (email, password) => {
 		const response = await jobRequest('enter', { email: email.get(), password: password.get() });
-		if (response.result.status === 'success') {
+		if (response.sessionToken) {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-			const sessionToken = response.result.sessionToken;
-			document.cookie = `webCore=${sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
-
+			document.cookie = `webCore=${response.sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
 			window.location.reload();
 		}
-		window.location.reload();
-
 		return response;
 	};
 

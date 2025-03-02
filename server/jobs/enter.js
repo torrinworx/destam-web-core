@@ -15,11 +15,11 @@ export default () => {
                     if (validPassword) {
                         const sessionToken = uuidv4();
                         user.sessions.push(sessionToken);
-                        return { status: 'success', sessionToken };
+                        return { sessionToken };
                     }
                 } else {
                     if (password.length < 10 && process.env.ENV === 'production') {
-                        return { status: 'error', error: 'Password must be at least 10 characters long' };
+                        return { error: 'Password must be at least 10 characters long' };
                     }
 
                     const saltRounds = 10;
@@ -40,13 +40,13 @@ export default () => {
 
                     const sessionToken = uuidv4();
                     user.sessions.push(sessionToken);
-                    return { status: 'success', sessionToken };
+                    return { sessionToken };
                 }
 
-                return { status: 'error', error: 'Invalid email or password' };
-            } catch (e) {
-                console.error(e)
-                return { status: 'error', error: e };
+                return { error: 'Invalid email or password' };
+            } catch (error) {
+                console.error(error)
+                return { error };
 
             }
         },

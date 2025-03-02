@@ -7,11 +7,11 @@ export default () => {
         init: async ({ email }) => {
             try {
                 const user = await ODB('mongodb', 'users', { 'email': email });
-                if (user) return { status: 'success', exists: true };
-                else return { status: 'success', exists: false }
+                if (user) return true;
+                else return false;
             } catch (e) {
                 console.log(e)
-                return { status: 'error', error: e };
+                return e;
             }
         },
     };
