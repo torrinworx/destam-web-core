@@ -3,11 +3,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { ODB } from 'destam-db-core';
 import { OObject, OArray } from 'destam';
 
-
 export default () => {
     return {
         authenticated: false,
-        init: async ({ email, password }) => {
+        init: async ({ email, password, onEnter }) => {
             try {
                 const user = await ODB('mongodb', 'users', { 'email': email });
                 if (user) {
@@ -40,6 +39,9 @@ export default () => {
 
                     const sessionToken = uuidv4();
                     user.sessions.push(sessionToken);
+
+                    await onEnter({ email, userID, user });
+
                     return { sessionToken };
                 }
 

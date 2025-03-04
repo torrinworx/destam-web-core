@@ -90,7 +90,7 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
  * @param {string} jobs_dir - The directory of job definitions.
  * @param {Function} connection - A function executed when a user makes an authenticated connection.
  */
-const core = async (server, jobs_dir, connection) => {
+const core = async (server, jobs_dir, connection, jobProps, onEnter) => {
     await initODB();
     const wss = new WebSocketServer({ server });
     const jobs = await Jobs(jobs_dir);
@@ -148,7 +148,9 @@ const core = async (server, jobs_dir, connection) => {
                     ...msg,
                     sync: job.authenticated ? sync : undefined,
                     user: job.authenticated ? user : undefined,
-                    ...connectionProps
+                    ...connectionProps,
+                    ...jobProps,
+                    onEnter: msg.name === 'enter' ? onEnter : null,
                 });
 
                 ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
@@ -170,7 +172,7 @@ const core = async (server, jobs_dir, connection) => {
  * @param {string} jobs_dir - The directory, or list of directories, of job definitions.
  * @param {Function} connection - A function executed when a user makes an authenticated connection.
  */
-const coreServer = async (jobs_dir, root, connection) => {
+const coreServer = async (jobs_dir, root, connection, jobProps, onEnter) => {
     const app = express();
 
     if (process.env.ENV === 'production') {
@@ -210,7 +212,7 @@ const coreServer = async (jobs_dir, root, connection) => {
 
     await core(app.listen(process.env.PORT || 3000, () => {
         console.log(`Server on http://localhost:${process.env.PORT || 3000}/`);
-    }), jobs_dir, connection);
+    }), jobs_dir, connection, jobProps, onEnter);
 };
 
 export default coreServer;

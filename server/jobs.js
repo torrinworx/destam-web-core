@@ -69,7 +69,7 @@ const Jobs = async (directories, props = {}) => {
 						loadedJobsCount++;
 
 						// Update the same line for each successfully loaded job
-						process.stdout.write(`\r${loadedJobsCount}/${totalJobs} jobs loaded.`);
+						process.stdout.write(`\rLoaded ${loadedJobsCount}/${totalJobs} jobs.`);
 					}
 				} catch (e) {
 					console.error(`Failed to load module from ${filePath}:`, e);
