@@ -1,7 +1,7 @@
 import { mount } from 'destam-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ODB, initODB } from 'destam-db-core';
-import { OObject, createNetwork } from 'destam';
+import { Observer, OObject, createNetwork } from 'destam';
 
 import { parse, stringify } from '../common/clone.js';
 
@@ -23,7 +23,7 @@ export const initWS = () => {
 	return new Promise((resolve, reject) => {
 		ws.addEventListener('open', () => resolve(ws));
 		ws.addEventListener('error', (err) => reject(err));
-		ws.addEventListener('close', () => {});
+		ws.addEventListener('close', () => { });
 	});
 };
 
@@ -109,7 +109,6 @@ export const syncNetwork = async () => {
 					}, 1000 / 30, arg => arg === fromServer);
 
 					window.addEventListener('unload', () => {
-						if (remove) remove();
 						if (ws) ws.close();
 						if (network) network.remove();
 					});
@@ -135,12 +134,15 @@ export const syncNetwork = async () => {
 	return state
 };
 
-export const coreClient = async (App, NotFound) => {
+export const coreClient = async ({ App, NotFound, pages, defaultPage = 'Landing' }) => {
+	if (!App) throw new Error('App component is required.')
+	if (!NotFound) throw new Error('NotFound component is required.');
+
 	await initWS();
 	await initODB();
-	const state = await syncNetwork();
 
-	if (!state.client.openPage) state.client.openPage = { page: "Landing" };
+	const state = await syncNetwork();
+	if (!state.client.openPage) state.client.openPage = { page: defaultPage };
 
 	const token = getCookie('webCore') || '';
 	if (token) {
@@ -164,5 +166,21 @@ export const coreClient = async (App, NotFound) => {
 
 	state.check = async (email) => await jobRequest('check', { email: email.get() });
 
-	mount(document.body, window.location.pathname === '/' ? <App state={state} /> : <NotFound />);
+	const auth = state.observer.path('sync').shallow().ignore()
+	const openPage = state.client.observer.path('openPage');
+
+	mount(document.body, pages ?
+		<App state={state}>
+			{Observer.all([auth, openPage]).map(([a, p]) => {
+				const page = pages[p.page].default;
+				const Page = page.page;
+
+				if (a || !page.authenticated) return <Page state={state} />;
+				else return <NotFound state={state} />;
+			})}
+		</App>
+		: window.location.pathname === '/'
+			? <App state={state} />
+			: <NotFound state={state} />
+	);
 };
