@@ -1,6 +1,6 @@
 # destam-web-core
 
-This package abstracts the core functionality of [OpenGig.org](https://github.com/torrinworx/OpenGig.org) into a reusable client-server setup for any web project. It is built on websockets for communication between the client and server.
+This package abstracts the core functionality of [OpenGig.org](https://github.com/torrinworx/OpenGig.org) into a reusable client-server setup for any web project. destam-web-core's goal is to reduce boilerplate components needed to setup web platforms. 
 
 Features:
 
