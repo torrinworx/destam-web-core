@@ -12,7 +12,6 @@ export const getCookie = (name) => {
 };
 
 let ws;
-
 export const initWS = () => {
 	const tokenValue = getCookie('webCore') || '';
 	const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -26,7 +25,6 @@ export const initWS = () => {
 		ws.addEventListener('close', () => { });
 	});
 };
-
 
 // todo: verbose mode that returns job name along with result
 export const jobRequest = (name, params) => {
@@ -69,7 +67,6 @@ export const jobRequest = (name, params) => {
 };
 
 export const syncNetwork = async () => {
-	let remove;
 	let network;
 	const fromServer = {};
 
@@ -134,28 +131,73 @@ export const syncNetwork = async () => {
 	return state
 };
 
-export const coreClient = async ({ App, NotFound, pages, defaultPage = 'Landing' }) => {
-	if (!App) throw new Error('App component is required.')
-	if (!NotFound) throw new Error('NotFound component is required.');
+export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing' }) => {
+	if (!App) throw new Error('App component is required.');
+	if (!Fallback) throw new Error('Fallback component is required.');
 
 	await initWS();
 	await initODB();
 
 	const state = await syncNetwork();
-	if (!state.client.openPage) state.client.openPage = { page: defaultPage };
+	const openPage = state.client.observer.path('openPage');
+
+	const getRoute = () => {
+		let path = window.location.pathname;
+		if (path.startsWith('/')) path = path.slice(1);
+		if (!path) path = defaultPage;
+		return path;
+	}
+
+	const route = getRoute();
+	if (!pages[route]) {
+		// If pages don't have this route, default to fallback
+		state.client.openPage = { page: Fallback.name };
+	} else {
+		state.client.openPage = { page: route };
+	}
+
+	/*
+	Automatically push a new history entry whenever openPage changes.
+	This ensures multiple states are stored for us to go back and
+	forward through.
+	*/
+	openPage.effect(page => {
+		const newPath = `/${page.page}`;
+		if (newPath !== window.location.pathname) {
+			// Push a new entry onto the history stack with the route name
+			history.pushState({ page: page.page }, '', newPath);
+		}
+	});
+
+	/*
+	Listen to popstate so that back/forward browser actions
+	update openPage accordingly. This also handles the user
+	manually editing the URL in the address bar.
+	*/
+	window.addEventListener('popstate', () => {
+		// If the user typed a URL or used back/forward, parse the current path
+		const path = getRoute();
+		if (!pages[path]) {
+			state.client.openPage = { page: Fallback.name };
+		} else {
+			state.client.openPage = { page: path };
+		}
+	});
 
 	const token = getCookie('webCore') || '';
-	if (token) {
-		(async () => await jobRequest('sync'))();
-		state.client.openPage = { page: 'Auth' }
-	} else {
-		if (state.client.openPage.page != 'Auth') {
-			state.client.openPage = { page: 'Landing' }
+	if (token) (async () => await jobRequest('sync'))();
+	else {
+		// If we don't have a token, set openPage to default
+		if (state.client.openPage.page !== 'Auth') {
+			state.client.openPage = { page: defaultPage };
 		}
-	};
+	}
 
 	state.enter = async (email, password) => {
-		const response = await jobRequest('enter', { email: email.get(), password: password.get() });
+		const response = await jobRequest('enter', {
+			email: email.get(),
+			password: password.get(),
+		});
 		if (response.sessionToken) {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
 			document.cookie = `webCore=${response.sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
@@ -166,21 +208,20 @@ export const coreClient = async ({ App, NotFound, pages, defaultPage = 'Landing'
 
 	state.check = async (email) => await jobRequest('check', { email: email.get() });
 
-	const auth = state.observer.path('sync').shallow().ignore()
-	const openPage = state.client.observer.path('openPage');
+	const auth = state.observer.path('sync').shallow().ignore();
+	const Router = () => Observer.all([auth, openPage]).map(([a, p]) => {
+		const routeCmp = pages[p.page];
+		if (!routeCmp) return <Fallback state={state} />;
+		const page = routeCmp.default;
+		const Page = page.page;
+		if (a || !page.authenticated) return <Page state={state} />;
+		else return <Fallback state={state} />;
+	});
 
-	mount(document.body, pages ?
-		<App state={state}>
-			{Observer.all([auth, openPage]).map(([a, p]) => {
-				const page = pages[p.page].default;
-				const Page = page.page;
-
-				if (a || !page.authenticated) return <Page state={state} />;
-				else return <NotFound state={state} />;
-			})}
-		</App>
-		: window.location.pathname === '/'
-			? <App state={state} />
-			: <NotFound state={state} />
+	mount(document.body,
+		pages ? <App state={state}><Router /></App>
+			: window.location.pathname === '/'
+				? <App state={state} />
+				: <Fallback state={state} />
 	);
 };
