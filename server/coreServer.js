@@ -175,12 +175,12 @@ const core = async (server, jobs_dir, connection, jobProps, onEnter) => {
 const coreServer = async (jobs_dir, root, connection, jobProps, onEnter) => {
     const app = express();
 
-    if (process.env.ENV === 'production') {
-        app.use(express.static(root));
-        console.log('Serving from:', path.join(root, 'index.html'));
+    if (process.env.NODE_ENV === 'production') {
+        const absoluteRoot = path.resolve(root);
+        app.use(express.static(absoluteRoot));
 
         app.get('*', (req, res) => {
-            res.sendFile(path.join(root, 'index.html'), err => {
+            res.sendFile('index.html', { root: absoluteRoot }, err => {
                 if (err) {
                     res.status(500).send(err);
                     console.error('Error serving index.html:', err);
