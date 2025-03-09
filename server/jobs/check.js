@@ -6,7 +6,12 @@ export default () => {
         authenticated: false,
         init: async ({ email }) => {
             try {
-                const user = await ODB('mongodb', 'users', { 'email': email });
+                const user = await ODB({
+                    driver: 'mongodb',
+                    collection: 'users',
+                    query: { 'email': email }
+                });
+
                 if (user) return true;
                 else return false;
             } catch (e) {

@@ -8,7 +8,12 @@ export default () => {
         authenticated: false,
         init: async ({ email, password, onEnter }) => {
             try {
-                const user = await ODB('mongodb', 'users', { 'email': email });
+                const user = await ODB({
+                    driver: 'mongodb',
+                    collection: 'users',
+                    query: { 'email': email }
+                });
+
                 if (user) {
                     const validPassword = await bcryptjs.compare(password, user.password);
                     if (validPassword) {
@@ -26,16 +31,24 @@ export default () => {
                     const hashedPassword = await bcryptjs.hash(password, salt);
 
                     const userID = uuidv4();
-                    const user = await ODB('mongodb', 'users', {}, OObject({
-                        email: email,
-                        password: hashedPassword,
-                        userID: userID,
-                        sessions: OArray([])
-                    }));
+                    const user = await ODB({
+                        driver: 'mongodb',
+                        collection: 'users',
+                        value: OObject({
+                            email: email,
+                            password: hashedPassword,
+                            userID: userID,
+                            sessions: OArray([])
+                        })
+                    });
 
-                    await ODB('mongodb', 'state', {}, OObject({
-                        userID: userID,
-                    }))
+                    await ODB({
+                        driver: 'mongodb',
+                        collection: 'state',
+                        value: OObject({
+                            userID: userID,
+                        })
+                    });
 
                     const sessionToken = uuidv4();
                     user.sessions.push(sessionToken);

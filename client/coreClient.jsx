@@ -73,9 +73,18 @@ export const syncNetwork = async () => {
 	// TODO: move client state creation to core() function instead.
 	// Client is an ODB driver running indexeddb so that changes to client state
 	// are maintained accross page reloads with a similar permanence to cookies.
-	let client = await ODB('indexeddb', 'client', { state: 'client' });
+	let client = await ODB({
+		driver: 'indexeddb',
+		collection: 'client',
+		query: { state: 'client' }
+	});
+
 	if (!client) {
-		client = await ODB('indexeddb', 'client', {}, OObject({ state: 'client' }))
+		client = await ODB({
+			driver: 'indexeddb',
+			collection: 'client',
+			value: OObject({ state: 'client' })
+		})
 	}
 
 	// State is split in two: state.sync and state.client, this prevents
