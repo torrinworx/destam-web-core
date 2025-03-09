@@ -26,17 +26,20 @@ import path from 'path';
 import 'dotenv/config';
 import express from 'express';
 import { WebSocketServer } from 'ws';
-import { createNetwork } from 'destam';
 import { ODB, initODB } from 'destam-db-core';
-import { Observer, OObject } from 'destam-dom';
 import { createServer as createViteServer } from 'vite';
+import { Observer, OObject, createNetwork } from 'destam';
 
 import Jobs from './jobs.js';
 import { parse, stringify } from '../common/clone.js';
 
 const authenticate = async (sessionToken) => {
     if (sessionToken && sessionToken != 'null') {
-        const user = await ODB('mongodb', 'users', { 'sessions': sessionToken });
+        const user = await ODB({
+            driver: 'mongodb',
+            collection: 'users',
+            query: { 'sessions': sessionToken }
+        });
 
         if (user) return true
         else return false
@@ -106,8 +109,16 @@ const core = async (server, jobs_dir, connection, jobProps, onEnter) => {
             if (d.value) {
                 (async () => {
                     if (connection) {
-                        user = await ODB('mongodb', 'users', { 'sessions': sessionToken.get() });
-                        sync = await ODB('mongodb', 'state', { userID: user.userID });
+                        user = await ODB({
+                            driver: 'mongodb',
+                            collection: 'users',
+                            query: { 'sessions': sessionToken.get() }
+                        });
+                        sync = await ODB({
+                            driver: 'mongodb',
+                            collection: 'state',
+                            query: { userID: user.userID }
+                        });
                         connectionProps = await connection(ws, req, user, sync, sessionToken);
                         syncNetwork(authenticated, ws, sync);
                     }
