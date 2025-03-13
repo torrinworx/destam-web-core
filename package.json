@@ -22,8 +22,6 @@
         "destam-dom": "^0.10.2",
         "destam-db-core": "file:destam-db-core",
         "dotenv": "^16.4.5",
-        "express": "^4.21.0",
-        "mongodb": "^6.9.0",
         "uuid": "^11.0.3",
         "vite": "^5.4.10",
         "ws": "^8.18.0"
