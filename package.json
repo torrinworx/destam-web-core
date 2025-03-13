@@ -4,7 +4,8 @@
     "exports": {
         ".": "./common/index.js",
         "./client": "./client/index.js",
-        "./server": "./server/index.js"
+        "./server": "./server/index.js",
+        "./server/servers/*": "./server/servers/*"
     },
     "type": "module",
     "scripts": {
