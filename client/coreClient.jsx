@@ -160,7 +160,13 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 	const route = getRoute();
 	if (!pages[route]) {
 		// If pages don't have this route, default to fallback
-		state.client.openPage = { page: Fallback.name };
+
+		// TODO: Issue here with fallback.name if in production without maps,
+		// the namem will get obfiscated, need to find a way around this that
+		// uses the proper name here at runtime:
+		// state.client.openPage = { page: Fallback.name };
+		state.client.openPage = { page: 'NotFound' };
+
 	} else {
 		state.client.openPage = { page: route };
 	}
