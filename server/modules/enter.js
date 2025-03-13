@@ -22,7 +22,7 @@ export default () => {
                         return { sessionToken };
                     }
                 } else {
-                    if (password.length < 10 && process.env.ENV === 'production') {
+                    if (password.length < 10 && process.env.NODE_ENV === 'production') {
                         return { error: 'Password must be at least 10 characters long' };
                     }
 
