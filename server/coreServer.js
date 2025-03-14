@@ -134,8 +134,13 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 				return;
 			}
 
+			if (!module.onMsg) {
+				console.error(`Client requested a client forbidden module: ${msg.name}`);
+				return;
+			}
+
 			try {
-				const result = await module.init({
+				const result = await module.onMsg({
 					...msg,
 					sync: module.authenticated ? sync : undefined,
 					user: module.authenticated ? user : undefined,
