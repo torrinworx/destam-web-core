@@ -29,7 +29,7 @@ export default ({ someModuleName, anotherModuleName }) => {
 	// or waiting on a connection to another server.
 
 	return {
-	 	// Internal functoin of module, used when other modules need to import this module.
+		  // Internal functoin of module, used when other modules need to import this module.
 		// Cannot be requested by the client.
 		int: () => {...},
 
@@ -93,6 +93,8 @@ export const deps = ['someDep', 'anotherDep'];
 export default ({ someDep, anotherDep }) => {
 	console.log('This doesn't even have to return anything, and just runs on startup');
 };
+
+TODO: modules system tests
 */
 
 import path from "path";
@@ -106,7 +108,7 @@ import { promises as fs } from "fs";
 const findFiles = async (directories) => {
 	const dirs = Array.isArray(directories) ? directories : [directories];
 
-	const recurseDirectory = async (dir) =>  {
+	const recurseDirectory = async (dir) => {
 		const entries = await fs.readdir(dir, { withFileTypes: true });
 		const results = await Promise.all(
 			entries.map(async (entry) => {
@@ -145,8 +147,15 @@ const moduleMetadata = async (directories) => {
 		moduleFiles.map(async ({ directory, filePath }) => {
 			try {
 				const mod = await import(filePath);
-				const relativePath = path.relative(directory, filePath);
+				const moduleRoot = directories.find(dir => filePath.startsWith(dir));
+				const relativePath = path.relative(moduleRoot, filePath);
 				const moduleName = relativePath.replace(/\\/g, "/").replace(/\.js$/, "");
+
+				// TODO: if module is a web-core default module and user specifies their own
+				// override the webcore one with the user defined one to allow for customization.
+				if (modulesMap[moduleName]) {
+					throw new Error(`Duplicate module name found: "${moduleName}". Each module name must be unique.`);
+				}
 
 				const deps = Array.isArray(mod.deps) ? mod.deps : [];
 				const factory = typeof mod.default === "function" ? mod.default : null;
@@ -187,7 +196,7 @@ const topoSort = (modulesMap) => {
 		adjacencyList[name] = [];
 		inDegree[name] = 0;
 	}
-	
+
 	// Build the graph
 	for (const name of allNames) {
 		const { deps } = modulesMap[name];
@@ -239,67 +248,61 @@ const topoSort = (modulesMap) => {
  *    - Also pass "props" (global extra data) for convenience.
  */
 const instantiateModules = async (modulesMap, sortedNames, props) => {
-    const instantiated = {};
-    const total = sortedNames.length;
-    let loadedCount = 0;
+	const instantiated = {};
+	const total = sortedNames.length;
+	let loadedCount = 0;
 
-    for (const name of sortedNames) {
-        const { deps, factory } = modulesMap[name];
-        if (!factory) {
-            console.warn(
-                `\nNo valid default export function for module "${name}". Skipping instantiation.`
-            );
-            continue;
-        }
+	for (const name of sortedNames) {
+		const { deps, factory } = modulesMap[name];
+		if (!factory) {
+			console.warn(
+				`\nNo valid default export function for module "${name}". Skipping instantiation.`
+			);
+			continue;
+		}
 
-        // Build the injection object
-        const injection = {};
+		// Build the injection object
+		const injection = {};
 
-        for (const depName of deps) {
-            const depInstance = instantiated[depName];
-            if (!depInstance) {
-                throw new Error(`\nCannot instantiate "${name}" - missing dependency "${depName}".`);
-            }
+		for (const depName of deps) {
+			const depInstance = instantiated[depName];
+			if (!depInstance) {
+				throw new Error(`\nCannot instantiate "${name}" - missing dependency "${depName}".`);
+			}
 
-            const shortName = depName.split("/").pop();
+			const shortName = depName.split("/").pop();
 
-            if (typeof depInstance.int !== "function") {
-                throw new Error(
-                    `\nDependency "${depName}" does not have an int() method, but is expected to be called as a function.`
-                );
-            }
+			if (typeof depInstance.int !== "function") {
+				throw new Error(
+					`\nDependency "${depName}" does not have an int() method, but is expected to be called as a function.`
+				);
+			}
 
-            injection[shortName] = (...args) => {
-                return depInstance.int(...args);
-            };
-        }
+			injection[shortName] = (...args) => {
+				return depInstance.int(...args);
+			};
+		}
 
-        injection.props = props;
-        const instance = await factory(injection);
+		injection.props = props;
+		const instance = await factory(injection);
 
-        if (instance && typeof instance !== "object") {
-            throw new Error(`\nModule "${name}" did not return a valid object from its default function.`);
-        }
+		if (instance && typeof instance !== "object") {
+			throw new Error(`\nModule "${name}" did not return a valid object from its default function.`);
+		}
 
-		if (instance) {
-			if (instance.authenticated === undefined) {
-                instance.authenticated = true;
-            }
-            instantiated[name] = instance;
-        }
+		instantiated[name] = instance;
+		loadedCount++;
+		process.stdout.write(`\rLoaded ${loadedCount}/${total} modules...`);
+	}
 
-        loadedCount++;
-        process.stdout.write(`\rLoaded ${loadedCount}/${total} modules...`);
-    }
-
-    process.stdout.write("\n");
+	process.stdout.write("\n");
 	return instantiated;
 };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const ModulesSystem = async (dirs, props = {}) => {
+const Modules = async (dirs, props = {}) => {
 	const directories = [
 		...(Array.isArray(dirs) ? dirs : [dirs]),
 		path.resolve(__dirname, "modules"), // webcore modules
@@ -310,4 +313,4 @@ const ModulesSystem = async (dirs, props = {}) => {
 	return await instantiateModules(modulesMap, sortedNames, props);
 };
 
-export default ModulesSystem;
+export default Modules;

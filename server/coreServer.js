@@ -124,35 +124,38 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 			if (msg.name === 'sync') return;
 
 			const module = modules[msg.name];
-			if (!module) {
+			if (!module && (!module.onMsg || !module.onMsgQ)) {
 				console.error(`Module not found: ${msg.name}`);
 				return;
 			}
 
-			if (!authenticated.get() && module.authenticated) {
+			// NOTE: if module.authenticated is not defined, then assume the module
+			// requires an authenticated connection for it be be ran by the client.
+			if (!authenticated.get() && module.authenticated === undefined) {
 				console.error(`Unauthorized access attempt to module: ${msg.name}`);
 				return;
 			}
 
-			if (!module.onMsg) {
-				console.error(`Client requested a client forbidden module: ${msg.name}`);
-				return;
+			if (module.onMsgQ) {
+				// TODO: send to multi threaded queue system, should return result?? idk maybe
+				return
+			} else { // else run regular onMsg
+				try {
+					const result = await module.onMsg({
+						...msg,
+						sync: module.authenticated ? sync : undefined,
+						user: module.authenticated ? user : undefined,
+						...conProps,
+						...props,
+						onEnter: msg.name === 'enter' ? onEnter : null,
+					});
+	
+					ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
+				} catch (error) {
+					console.error(`Error running module '${msg.name}':`, error);
+				}
 			}
 
-			try {
-				const result = await module.onMsg({
-					...msg,
-					sync: module.authenticated ? sync : undefined,
-					user: module.authenticated ? user : undefined,
-					...conProps,
-					...props,
-					onEnter: msg.name === 'enter' ? onEnter : null,
-				});
-
-				ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
-			} catch (error) {
-				console.error(`Error running module '${msg.name}':`, error);
-			}
 		});
 	});
 };
