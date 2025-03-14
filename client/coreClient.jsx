@@ -141,7 +141,6 @@ export const syncNetwork = async () => {
 };
 
 export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing' }) => {
-	console.log(pages);
 	if (!App) throw new Error('App component is required.');
 	if (!Fallback) throw new Error('Fallback component is required.');
 
@@ -220,7 +219,6 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 
 	const auth = state.observer.path('sync').shallow().ignore();
 	const Router = () => Observer.all([auth, openPage]).map(([a, p]) => {
-		console.log('This is router')
 		const routeCmp = pages[p.name];
 		if (!routeCmp) return <Fallback state={state} />;
 		const page = routeCmp.default;
@@ -229,7 +227,6 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		else return <Fallback state={state} />;
 	});
 
-	console.log(pages);
 	mount(document.body,
 		pages ? <App state={state}><Router /></App>
 			: window.location.pathname === '/'
