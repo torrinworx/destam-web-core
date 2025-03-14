@@ -158,6 +158,7 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 	}
 
 	const route = getRoute();
+	console.log(pages[route])
 	if (!pages[route]) {
 		// If pages don't have this route, default to fallback
 
@@ -165,7 +166,7 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		// the namem will get obfiscated, need to find a way around this that
 		// uses the proper name here at runtime:
 		// state.client.openPage = { page: Fallback.name };
-		state.client.openPage = { page: 'NotFound' };
+		state.client.openPage = { page: Fallback.name };
 
 	} else {
 		state.client.openPage = { page: route };
@@ -201,12 +202,6 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 
 	const token = getCookie('webCore') || '';
 	if (token) (async () => await jobRequest('sync'))();
-	else {
-		// If we don't have a token, set openPage to default
-		if (state.client.openPage.page !== 'Auth') {
-			state.client.openPage = { page: defaultPage };
-		}
-	}
 
 	state.enter = async (email, password) => {
 		const response = await jobRequest('enter', {
