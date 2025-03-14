@@ -141,6 +141,7 @@ export const syncNetwork = async () => {
 };
 
 export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing' }) => {
+	console.log(pages);
 	if (!App) throw new Error('App component is required.');
 	if (!Fallback) throw new Error('Fallback component is required.');
 
@@ -158,18 +159,17 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 	}
 
 	const route = getRoute();
-	console.log(pages[route])
 	if (!pages[route]) {
 		// If pages don't have this route, default to fallback
 
 		// TODO: Issue here with fallback.name if in production without maps,
 		// the namem will get obfiscated, need to find a way around this that
 		// uses the proper name here at runtime:
-		// state.client.openPage = { page: Fallback.name };
-		state.client.openPage = { page: Fallback.name };
+		// state.client.openPage = { name: Fallback.name };
+		state.client.openPage = { name: Fallback.name };
 
 	} else {
-		state.client.openPage = { page: route };
+		state.client.openPage = { name: route };
 	}
 
 	/*
@@ -178,10 +178,10 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 	forward through.
 	*/
 	openPage.effect(page => {
-		const newPath = `/${page.page}`;
+		const newPath = `/${page.name}`;
 		if (newPath !== window.location.pathname) {
 			// Push a new entry onto the history stack with the route name
-			history.pushState({ page: page.page }, '', newPath);
+			history.pushState({ name: page.name }, '', newPath);
 		}
 	});
 
@@ -194,9 +194,9 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		// If the user typed a URL or used back/forward, parse the current path
 		const path = getRoute();
 		if (!pages[path]) {
-			state.client.openPage = { page: Fallback.name };
+			state.client.openPage = { name: Fallback.name };
 		} else {
-			state.client.openPage = { page: path };
+			state.client.openPage = { name: path };
 		}
 	});
 
@@ -220,7 +220,8 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 
 	const auth = state.observer.path('sync').shallow().ignore();
 	const Router = () => Observer.all([auth, openPage]).map(([a, p]) => {
-		const routeCmp = pages[p.page];
+		console.log('This is router')
+		const routeCmp = pages[p.name];
 		if (!routeCmp) return <Fallback state={state} />;
 		const page = routeCmp.default;
 		const Page = page.page;
@@ -228,6 +229,7 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		else return <Fallback state={state} />;
 	});
 
+	console.log(pages);
 	mount(document.body,
 		pages ? <App state={state}><Router /></App>
 			: window.location.pathname === '/'
