@@ -26,20 +26,20 @@ export const initWS = () => {
 	});
 };
 
-// todo: verbose mode that returns job name along with result
 export const jobRequest = (name, params) => {
 	return new Promise(async (resolve, reject) => {
 		const msgID = uuidv4();
 
 		const handleMessage = (event) => {
-			try {
-				const response = JSON.parse(event.data);
-				if (response.id === msgID) {
-					ws.removeEventListener('message', handleMessage);
+			const response = JSON.parse(event.data);
+			if (response.id === msgID) {
+				ws.removeEventListener('message', handleMessage);
+
+				if (response.error) {
+					console.error(response.error);
+				} else {
 					resolve(response.result);
 				}
-			} catch (error) {
-				console.error('Failed to parse incoming message:', error);
 			}
 		};
 

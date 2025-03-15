@@ -1,9 +1,12 @@
+import { v4 as uuidv4 } from 'uuid';
+
 import 'dotenv/config';
 import { WebSocketServer } from 'ws';
 import { ODB, initODB } from 'destam-db-core';
 import { createServer as createViteServer } from 'vite';
 import { Observer, OObject, createNetwork } from 'destam';
 
+import initQ from './queue.js';
 import Modules from './modules.js';
 import http from './servers/http.js';
 import { parse, stringify } from '../common/clone.js';
@@ -64,6 +67,8 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
 const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, props }) => {
 	await initODB();
 	const modules = await Modules(modulesDir);
+	const queue = await initQ({ modules });
+
 	server = server ? server = server() : http();
 
 	if (process.env.NODE_ENV === 'production') {
@@ -75,6 +80,8 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 
 	server = await server.listen();
 	const wss = new WebSocketServer({ server });
+
+	console.log("THIS IS QUEUE: ", queue);
 
 	wss.on('connection', async (ws, req) => {
 		let sync;
@@ -113,49 +120,58 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 		authenticated.set(status);
 
 		ws.on('message', async msg => {
-			msg = parse(msg);
+			try {
+				msg = parse(msg);
 
-			if (!authenticated.get() && msg.sessionToken) {
-				sessionToken.set(msg.sessionToken);
-				const status = await authenticate(sessionToken.get());
-				authenticated.set(status);
-			}
+				if (!authenticated.get() && msg.sessionToken) {
+					sessionToken.set(msg.sessionToken);
+					const status = await authenticate(sessionToken.get());
+					authenticated.set(status);
+				}
 
-			if (msg.name === 'sync') return;
+				if (msg.name === 'sync') return;
 
-			const module = modules[msg.name];
-			if (!module && (!module.onMsg || !module.onMsgQ)) {
-				console.error(`Module not found: ${msg.name}`);
-				return;
-			}
+				const module = modules[msg.name];
+				if (!module || (!module.onMsg && !module.onMsgQ)) {
+					throw new Error(`Module not found: ${msg.name}`);
+				}
 
-			// NOTE: if module.authenticated is not defined, then assume the module
-			// requires an authenticated connection for it be be ran by the client.
-			if (!authenticated.get() && module.authenticated === undefined) {
-				console.error(`Unauthorized access attempt to module: ${msg.name}`);
-				return;
-			}
+				if (!authenticated.get() && module.authenticated !== false) {
+					throw new Error(`Unauthorized access attempt to module: ${msg.name}`);
+				}
 
-			if (module.onMsgQ) {
-				// TODO: send to multi threaded queue system, should return result?? idk maybe
-				return
-			} else { // else run regular onMsg
-				try {
-					const result = await module.onMsg({
-						...msg,
-						sync: module.authenticated ? sync : undefined,
-						user: module.authenticated ? user : undefined,
+				let result;
+				if (module.onMsgQ) {
+					const request = OObject({
+						id: msg.id,
+						module: msg.name,
+						props: {
+							...(module.authenticated && { sync, user }),
+							...conProps,
+							...props,
+						},
+						status: 'pending',
+						created: new Date()
+					});
+
+					queue.push(request);
+
+					request.observer.path('status').watch(d => {
+						console.log(d.value);
+					})
+				} else {
+					result = await module.onMsg({
+						...(module.authenticated && { sync, user }),
 						...conProps,
 						...props,
 						onEnter: msg.name === 'enter' ? onEnter : null,
 					});
-	
-					ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
-				} catch (error) {
-					console.error(`Error running module '${msg.name}':`, error);
 				}
+				ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
+			} catch (error) {
+				console.error(error);
+				ws.send(JSON.stringify({ error: error.message, id: msg.id }));
 			}
-
 		});
 	});
 };
