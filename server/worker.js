@@ -1,15 +1,14 @@
 import { parentPort } from 'worker_threads';
 
-parentPort.on('message', async (item) => {
+import Modules from './modules.js';
+
+// const modules = await Modules(modulesDir);
+
+parentPort.on('message', async ({ id, modulesDir, module, props }) => {
     let result = null;
     let error = null;
 
-    try {
-        const func = eval(`(${item.onMsgQ})`);
-        result = await func(item.props);
-    } catch (err) {
-        error = err.toString();
-    }
+    console.log(modulesDir)
 
-    parentPort.postMessage({ id: item.id, result, error });
+    parentPort.postMessage({ id, result, error });
 });

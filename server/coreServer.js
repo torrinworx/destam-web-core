@@ -1,14 +1,12 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import 'dotenv/config';
 import { WebSocketServer } from 'ws';
 import { ODB, initODB } from 'destam-db-core';
 import { createServer as createViteServer } from 'vite';
 import { Observer, OObject, createNetwork } from 'destam';
 
-import initQ from './queue.js';
 import Modules from './modules.js';
 import http from './servers/http.js';
+import initQ, { requestQ } from './queue.js';
 import { parse, stringify } from '../common/clone.js';
 
 const authenticate = async (sessionToken) => {
@@ -67,7 +65,8 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
 const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, props }) => {
 	await initODB();
 	const modules = await Modules(modulesDir);
-	const queue = await initQ({ modules });
+	// queue system must be started after all modules are loaded
+	// initQ(modulesDir);
 
 	server = server ? server = server() : http();
 
@@ -80,8 +79,6 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 
 	server = await server.listen();
 	const wss = new WebSocketServer({ server });
-
-	console.log("THIS IS QUEUE: ", queue);
 
 	wss.on('connection', async (ws, req) => {
 		let sync;
@@ -132,6 +129,7 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 				if (msg.name === 'sync') return;
 
 				const module = modules[msg.name];
+				// module must have at least onMsg or onMsgQ to be called by client.
 				if (!module || (!module.onMsg && !module.onMsgQ)) {
 					throw new Error(`Module not found: ${msg.name}`);
 				}
@@ -140,30 +138,34 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 					throw new Error(`Unauthorized access attempt to module: ${msg.name}`);
 				}
 
+				// TODO: Better way to organize props and distinguish between where different
+				// props are coming from, need to distinguish in case of conflicting prop names:
+
+				// Individual module can should really only have onMsgQ or onMsg, not both.
 				let result;
+				console.log(module.onMsgQ)
 				if (module.onMsgQ) {
 					const request = OObject({
+						// TODO: if id isn't provided in msg here then provide it ourselves:
 						id: msg.id,
 						module: msg.name,
 						props: {
 							...(module.authenticated && { sync, user }),
 							...conProps,
 							...props,
+							...msg.props
 						},
-						status: 'pending',
-						created: new Date()
 					});
 
-					queue.push(request);
-
-					request.observer.path('status').watch(d => {
-						console.log(d.value);
-					})
+					const result = await requestQ(request);
+					console.log(result);
 				} else {
+					console.log(msg)
 					result = await module.onMsg({
 						...(module.authenticated && { sync, user }),
 						...conProps,
 						...props,
+						...msg.props,
 						onEnter: msg.name === 'enter' ? onEnter : null,
 					});
 				}

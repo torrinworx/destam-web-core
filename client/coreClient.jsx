@@ -26,7 +26,7 @@ export const initWS = () => {
 	});
 };
 
-export const jobRequest = (name, params) => {
+export const jobRequest = ({ name, props }) => {
 	return new Promise(async (resolve, reject) => {
 		const msgID = uuidv4();
 
@@ -49,7 +49,7 @@ export const jobRequest = (name, params) => {
 					name: name,
 					sessionToken: getCookie('webCore') || '',
 					id: msgID,
-					...params
+					props
 				}));
 			} else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
 				ws.removeEventListener('message', handleMessage);
@@ -111,7 +111,7 @@ export const syncNetwork = async () => {
 							changes,
 							{ observerRefs: observerRefs, observerNetwork: network }
 						);
-						jobRequest('sync', { clientChanges: clientChanges })
+						jobRequest({ name: 'sync', props: { clientChanges: clientChanges } })
 					}, 1000 / 30, arg => arg === fromServer);
 
 					window.addEventListener('unload', () => {
@@ -166,7 +166,6 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		// uses the proper name here at runtime:
 		// state.client.openPage = { name: Fallback.name };
 		state.client.openPage = { name: Fallback.name };
-
 	} else {
 		state.client.openPage = { name: route };
 	}
@@ -200,12 +199,15 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 	});
 
 	const token = getCookie('webCore') || '';
-	if (token) (async () => await jobRequest('sync'))();
+	if (token) (async () => await jobRequest({ name: 'sync' }))();
 
 	state.enter = async (email, password) => {
-		const response = await jobRequest('enter', {
-			email: email.get(),
-			password: password.get(),
+		const response = await jobRequest({
+			name: 'enter',
+			props: {
+				email: email.get(),
+				password: password.get(),
+			}
 		});
 		if (response.sessionToken) {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
@@ -215,7 +217,10 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		return response;
 	};
 
-	state.check = async (email) => await jobRequest('check', { email: email.get() });
+	state.check = async (email) => await jobRequest({
+		name: 'check',
+		props: { email: email.get() }
+	});
 
 	const auth = state.observer.path('sync').shallow().ignore();
 	const Router = () => Observer.all([auth, openPage]).map(([a, p]) => {

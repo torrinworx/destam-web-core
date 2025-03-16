@@ -11,7 +11,6 @@ export default () => {
 					collection: 'users',
 					query: { 'email': email }
 				});
-
 				if (user) return true;
 				else return false;
 			} catch (e) {
