@@ -13,7 +13,7 @@ export const getCookie = (name) => {
 
 let ws;
 export const initWS = () => {
-	const tokenValue = getCookie('webCore') || '';
+	const tokenValue = getCookie('webcore') || '';
 	const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
 	const wsURL = tokenValue
 		? `${protocol}${window.location.hostname}:${window.location.port}/?sessionToken=${encodeURIComponent(tokenValue)}`
@@ -44,21 +44,17 @@ export const jobRequest = ({ name, props }) => {
 		};
 
 		const sendMessage = () => {
-			if (ws.readyState === WebSocket.OPEN) {
+			try {
 				ws.send(JSON.stringify({
 					name: name,
-					sessionToken: getCookie('webCore') || '',
+					sessionToken: getCookie('webcore') || '',
 					id: msgID,
 					props
 				}));
-			} else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-				ws.removeEventListener('message', handleMessage);
-				ws = initWS()
-					.then(() => sendMessage())
-					.catch(err => reject(new Error('WebSocket could not be re-opened: ' + err.message)));
-			} else {
-				reject(new Error('WebSocket is not open. Ready state is: ' + ws.readyState));
+			} catch (error) {
+				reject(new Error('Issue with server module request: ', error));
 			}
+
 		};
 
 		ws.addEventListener('message', handleMessage);
@@ -66,38 +62,73 @@ export const jobRequest = ({ name, props }) => {
 	});
 };
 
-export const syncNetwork = async () => {
+// stolen from: https://stackoverflow.com/a/63952971/15739035
+const cookieUpdates = () => {
+	const parseCookieString = (cookieString) => {
+		const result = {};
+		cookieString.split('; ').forEach(cookie => {
+			const [key, value] = cookie.split('=');
+			result[key] = value;
+		});
+		return result;
+	}
+
+	const areCookiesEqual = (cookieA, cookieB) => {
+		// Check that all keys and values are the same
+		if (Object.keys(cookieA).length !== Object.keys(cookieB).length) {
+			return false;
+		}
+		for (const key in cookieA) {
+			if (cookieA[key] !== cookieB[key]) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	let lastCookie = parseCookieString(document.cookie);
+	const expando = '_cookie';
+	let nativeCookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+
+	Object.defineProperty(Document.prototype, expando, nativeCookieDesc);
+	Object.defineProperty(Document.prototype, 'cookie', {
+		enumerable: true,
+		configurable: true,
+		get() {
+			return this[expando];
+		},
+		set(value) {
+			this[expando] = value;
+			let cookie = parseCookieString(this[expando]);
+			if (!areCookiesEqual(cookie, lastCookie)) {
+				try {
+					let detail = { oldValue: lastCookie, newValue: cookie };
+					this.dispatchEvent(new CustomEvent('cookiechange', {
+						detail: detail
+					}));
+					channel.postMessage(detail);
+				} finally {
+					lastCookie = cookie;
+				}
+			}
+		}
+	});
+
+	const channel = new BroadcastChannel('cookie-channel');
+	channel.onmessage = (e) => {
+		lastCookie = e.data.newValue;
+		document.dispatchEvent(new CustomEvent('cookiechange', {
+			detail: e.data
+		}));
+	};
+};
+
+export const syncNetwork = async (state) => {
 	let network;
 	const fromServer = {};
 
-	// TODO: move client state creation to core() function instead.
-	// Client is an ODB driver running indexeddb so that changes to client state
-	// are maintained accross page reloads with a similar permanence to cookies.
-	let client = await ODB({
-		driver: 'indexeddb',
-		collection: 'client',
-		query: { state: 'client' }
-	});
-
-	if (!client) {
-		client = await ODB({
-			driver: 'indexeddb',
-			collection: 'client',
-			value: OObject({ state: 'client' })
-		})
-	}
-
-	// State is split in two: state.sync and state.client, this prevents
-	// client only updates from needlessly updating the database.
-	const state = OObject({
-		client: client,
-		sync: null
-	});
-	window.state = state;
-
-	ws.addEventListener('message', (msg) => {
+	ws.addEventListener('message', msg => {
 		msg = parse(msg.data);
-
 		// look for sync here because other data is returned from the server for jobRequest:
 		if (msg.name === 'sync') {
 			const serverChanges = parse(msg.result);
@@ -111,7 +142,7 @@ export const syncNetwork = async () => {
 							changes,
 							{ observerRefs: observerRefs, observerNetwork: network }
 						);
-						jobRequest({ name: 'sync', props: { clientChanges: clientChanges } })
+						await jobRequest({ name: 'sync', props: { clientChanges: clientChanges } })
 					}, 1000 / 30, arg => arg === fromServer);
 
 					window.addEventListener('unload', () => {
@@ -136,8 +167,6 @@ export const syncNetwork = async () => {
 	ws.addEventListener('error', (error) => {
 		console.error('WebSocket error:', error.message);
 	});
-
-	return state
 };
 
 export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing' }) => {
@@ -147,8 +176,43 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 	await initWS();
 	await initODB();
 
-	const state = await syncNetwork();
-	const openPage = state.client.observer.path('openPage');
+	// Client is an ODB driver running indexeddb so that changes to client state
+	// are maintained accross page reloads with a similar permanence to cookies.
+	let client = await ODB({
+		driver: 'indexeddb',
+		collection: 'client',
+		query: { state: 'client' }
+	});
+
+	if (!client) {
+		client = await ODB({
+			driver: 'indexeddb',
+			collection: 'client',
+			value: OObject({ state: 'client' })
+		})
+	}
+
+	// State is split in two: state.sync and state.client, this prevents
+	// client only updates from needlessly updating the database.
+	const state = OObject({
+		client: client,
+		sync: null
+	});
+	window.state = state;
+
+	await syncNetwork(state);
+	cookieUpdates();
+
+	const openPage = state.client.observer.path('openPage').def({ name: defaultPage });
+
+	// Listen for when web-core cookie is changed, re-init state if webcore cookie deleted (only deleted on signout)
+	// document.addEventListener('cookiechange', async ({ detail: { newValue, oldValue } }) => {
+	// 	console.log(newValue, '\n', oldValue);
+	// 	if (oldValue.webcore && !newValue.webcore) {
+	// 		state.client.openGig = { name: defaultPage };
+	// 	}
+	// });
+	// TODO: Ensure logout even when user clears cookies
 
 	const getRoute = () => {
 		let path = window.location.pathname;
@@ -158,30 +222,12 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 	}
 
 	const route = getRoute();
-	if (!pages[route]) {
-		// If pages don't have this route, default to fallback
-
-		// TODO: Issue here with fallback.name if in production without maps,
-		// the namem will get obfiscated, need to find a way around this that
-		// uses the proper name here at runtime:
-		// state.client.openPage = { name: Fallback.name };
-		state.client.openPage = { name: Fallback.name };
-	} else {
-		state.client.openPage = { name: route };
-	}
-
-	/*
-	Automatically push a new history entry whenever openPage changes.
-	This ensures multiple states are stored for us to go back and
-	forward through.
-	*/
-	openPage.effect(page => {
-		const newPath = `/${page.name}`;
-		if (newPath !== window.location.pathname) {
-			// Push a new entry onto the history stack with the route name
-			history.pushState({ name: page.name }, '', newPath);
-		}
-	});
+	// TODO: Issue here with fallback.name if in production without maps,
+	// the namem will get obfiscated, need to find a way around this that
+	// uses the proper name here at runtime:
+	// state.client.openPage = { name: Fallback.name };
+	if (pages[route]) state.client.openPage = { name: route };
+	else state.client.openPage = { name: Fallback.name };
 
 	/*
 	Listen to popstate so that back/forward browser actions
@@ -198,7 +244,7 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		}
 	});
 
-	const token = getCookie('webCore') || '';
+	const token = getCookie('webcore') || '';
 	if (token) (async () => await jobRequest({ name: 'sync' }))();
 
 	state.enter = async (email, password) => {
@@ -211,8 +257,8 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		});
 		if (response.sessionToken) {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-			document.cookie = `webCore=${response.sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
-			window.location.reload();
+			document.cookie = `webcore=${response.sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
+			await jobRequest({ name: 'sync' })
 		}
 		return response;
 	};
@@ -222,15 +268,44 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		props: { email: email.get() }
 	});
 
-	const auth = state.observer.path('sync').shallow().ignore();
-	const Router = () => Observer.all([auth, openPage]).map(([a, p]) => {
-		const routeCmp = pages[p.name];
-		if (!routeCmp) return <Fallback state={state} />;
-		const page = routeCmp.default;
-		const Page = page.page;
-		if (a || !page.authenticated) return <Page state={state} />;
-		else return <Fallback state={state} />;
-	});
+	state.leave = () => {
+		document.cookie = 'webcore=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax';
+		const cookies = document.cookie.split("; ");
+		for (const cookie of cookies) {
+			const eqPos = cookie.indexOf("=");
+			const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+			document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+		}
+		state.client.openPage = { name: defaultPage };
+		state.sync = null;
+	};
+
+	const Router = (_, cleanup) => {
+		const auth = state.observer.path('sync').shallow().ignore();
+
+		cleanup(openPage.effect(page => {
+			const newPath = `/${page.name}`;
+			if (newPath !== window.location.pathname) {
+				// Push a new entry onto the history stack with the route name
+				history.pushState({ name: page.name }, '', newPath);
+			}
+		}));
+
+		return Observer.all([openPage, auth]).map(([p, a]) => {
+			const pageCmp = pages[p.name];
+			if (!pageCmp) return <Fallback state={state} />;
+			const page = pageCmp.default;
+			const Page = page.page;
+
+			if (Page) return !page.authenticated
+				? <Page state={state} />
+				: (a && page.authenticated
+					? <Page state={state} />
+					: <Fallback state={state} />
+				)
+			else return <Fallback state={state} />;
+		}).unwrap();
+	};
 
 	mount(document.body,
 		pages ? <App state={state}><Router /></App>
