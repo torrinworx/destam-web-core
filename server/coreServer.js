@@ -6,7 +6,6 @@ import { Observer, OObject, createNetwork } from 'destam';
 
 import Modules from './modules.js';
 import http from './servers/http.js';
-import initQ, { requestQ } from './queue.js';
 import { parse, stringify } from '../common/clone.js';
 
 const authenticate = async (sessionToken) => {
@@ -141,34 +140,13 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 				// TODO: Better way to organize props and distinguish between where different
 				// props are coming from, need to distinguish in case of conflicting prop names:
 
-				// Individual module can should really only have onMsgQ or onMsg, not both.
-				let result;
-				console.log(module.onMsgQ)
-				if (module.onMsgQ) {
-					const request = OObject({
-						// TODO: if id isn't provided in msg here then provide it ourselves:
-						id: msg.id,
-						module: msg.name,
-						props: {
-							...(module.authenticated && { sync, user }),
-							...conProps,
-							...props,
-							...msg.props
-						},
-					});
-
-					const result = await requestQ(request);
-					console.log(result);
-				} else {
-					console.log(msg)
-					result = await module.onMsg({
-						...(module.authenticated && { sync, user }),
-						...conProps,
-						...props,
-						...msg.props,
-						onEnter: msg.name === 'enter' ? onEnter : null,
-					});
-				}
+				const result = await module.onMsg({
+					...(module.authenticated && { sync, user }),
+					...conProps,
+					...props,
+					...msg.props,
+					onEnter: msg.name === 'enter' ? onEnter : null,
+				});
 				ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
 			} catch (error) {
 				console.error(error);
