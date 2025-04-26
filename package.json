@@ -18,8 +18,8 @@
     "license": "GPL-3.0",
     "dependencies": {
         "bcryptjs": "^2.4.3",
-        "destam": "^0.5.2",
-        "destam-dom": "^0.11.0",
+        "destam": "^0.5.3",
+        "destam-dom": "^0.11.3",
         "destam-db-core": "file:destam-db-core",
         "dotenv": "^16.4.5",
         "uuid": "^11.0.3",
