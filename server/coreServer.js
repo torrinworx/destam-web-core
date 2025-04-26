@@ -8,6 +8,13 @@ import Modules from './modules.js';
 import http from './servers/http.js';
 import { parse, stringify } from '../common/clone.js';
 
+/**
+ * Authenticates a user session based on a session token.
+ * Retrieves the user associated with the provided session token from the database.
+ *
+ * @param {string} sessionToken - The session token used to authenticate the user.
+ * @returns {Promise<boolean>} - A promise that resolves to `true` if the user is authenticated, `false` otherwise.
+ */
 const authenticate = async (sessionToken) => {
 	if (sessionToken && sessionToken != 'null') {
 		const user = await ODB({
@@ -61,11 +68,28 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
 	return sync;
 };
 
+/**
+ * Initializes and manages the core server that handles WebSocket connections,
+ * server environments, and modules loading. Facilitates communication between the client
+ * and server, while managing user authentication and synchronization of state.
+ *
+ * At minimum coreServer needs to run an http server, and a ws websocket server.
+ * 
+ * The "server" variable allows you to configure your own special server for express, etc.
+ *
+ * @async
+ * @function
+ * @param {Object} options - Configuration options for setting up the server.
+ * @param {Function} [options.server=null] - Custom server initialization function.
+ * @param {string} options.root - Root directory for the server setup.
+ * @param {string} options.modulesDir - Directory path where modules are stored.
+ * @param {Function} [options.onCon] - Callback executed upon a new WebSocket connection.
+ * @param {Function} [options.onEnter] - Callback executed when a client enters.
+ * @param {Object} options.props - Additional properties passed to modules.
+ */
 const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, props }) => {
 	await initODB();
 	const modules = await Modules(modulesDir);
-	// queue system must be started after all modules are loaded
-	// initQ(modulesDir);
 
 	server = server ? server = server() : http();
 
