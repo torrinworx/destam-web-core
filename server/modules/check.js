@@ -1,16 +1,9 @@
-import { ODB } from 'destam-db-core';
-
-// Simple check to see if user exists
 export default () => {
 	return {
 		authenticated: false,
-		onMsg: async ({ email }) => {
+		onMsg: async ({ email }, _, { DB }) => {
 			try {
-				const user = await ODB({
-					driver: 'mongodb',
-					collection: 'users',
-					query: { 'email': email }
-				});
+				const user = await DB('users', { 'email': email });
 				if (user) return true;
 				else return false;
 			} catch (e) {

@@ -1,6 +1,7 @@
+import database from 'destam-db';
 import { mount } from 'destam-dom';
 import { v4 as uuidv4 } from 'uuid';
-import { ODB, initODB } from 'destam-db-core';
+import indexeddb from 'destam-db/driver/indexeddb.js';
 import { Observer, OObject, createNetwork } from 'destam';
 
 import { parse, stringify } from '../common/clone.js';
@@ -170,27 +171,14 @@ export const syncNetwork = async (state) => {
 };
 
 export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing' }) => {
+	const driver = indexeddb('webcore');
+	const DB = database(driver);
+	const client = await DB.reuse('client', { state: 'client' });
+
 	if (!App) throw new Error('App component is required.');
 	if (!Fallback) throw new Error('Fallback component is required.');
 
 	await initWS();
-	await initODB();
-
-	// Client is an ODB driver running indexeddb so that changes to client state
-	// are maintained accross page reloads with a similar permanence to cookies.
-	let client = await ODB({
-		driver: 'indexeddb',
-		collection: 'client',
-		query: { state: 'client' }
-	});
-
-	if (!client) {
-		client = await ODB({
-			driver: 'indexeddb',
-			collection: 'client',
-			value: OObject({ state: 'client' })
-		})
-	}
 
 	// State is split in two: state.sync and state.client, this prevents
 	// client only updates from needlessly updating the database.
