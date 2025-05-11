@@ -20,7 +20,7 @@
         "bcryptjs": "^2.4.3",
         "destam": "^0.5.3",
         "destam-dom": "^0.11.3",
-        "destam-db-core": "file:destam-db-core",
+        "destam-db": "file:db",
         "dotenv": "^16.4.5",
         "uuid": "^11.0.3",
         "vite": "^5.4.10",

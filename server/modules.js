@@ -39,7 +39,7 @@ const findFiles = async (directories) => {
  *    - deps (named export)
  *    - factory (default export)
  */
-const moduleMetadata = async (directories) => {
+const mapModules = async (directories) => {
 	const moduleFiles = await findFiles(directories);
 	let discoveredCount = 0;
 	const modulesMap = {};
@@ -206,10 +206,10 @@ const __dirname = path.dirname(__filename);
 const Modules = async (dirs, props = {}) => {
 	const directories = [
 		...(Array.isArray(dirs) ? dirs : [dirs]),
-		path.resolve(__dirname, "modules"), // webcore modules
+		path.resolve(__dirname, "modules"),
 	];
 
-	const modulesMap = await moduleMetadata(directories);
+	const modulesMap = await mapModules(directories);
 	const sortedNames = topoSort(modulesMap);
 	return await instantiateModules(modulesMap, sortedNames, props);
 };

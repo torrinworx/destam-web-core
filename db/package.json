@@ -1,0 +1,33 @@
+{
+  "name": "destam-db",
+  "version": "0.0.1",
+  "description": "A database abstraction built on top of destam",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "author": "Alexander Orzechowski",
+  "license": "MIT",
+  "peerDependencies": {
+    "destam": "^0.5.3",
+    "mongodb": "^6.6.2"
+  },
+  "peerDependenciesMeta": {
+    "mongodb": {
+      "optional": true
+    },
+    "idb": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "heap": "^0.2.7",
+    "i": "^0.3.7",
+    "npm": "^11.3.0"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.0.1",
+    "mongodb-memory-server": "^10.1.4"
+  }
+}

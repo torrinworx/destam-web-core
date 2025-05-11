@@ -1,6 +1,7 @@
 import 'dotenv/config';
+import database from 'destam-db';
 import { WebSocketServer } from 'ws';
-import { ODB, initODB } from 'destam-db-core';
+import mongodb from 'destam-db/driver/mongodb.js';
 import { createServer as createViteServer } from 'vite';
 import { Observer, OObject, createNetwork } from 'destam';
 
@@ -8,25 +9,7 @@ import Modules from './modules.js';
 import http from './servers/http.js';
 import { parse, stringify } from '../common/clone.js';
 
-/**
- * Authenticates a user session based on a session token.
- * Retrieves the user associated with the provided session token from the database.
- *
- * @param {string} sessionToken - The session token used to authenticate the user.
- * @returns {Promise<boolean>} - A promise that resolves to `true` if the user is authenticated, `false` otherwise.
- */
-const authenticate = async (sessionToken) => {
-	if (sessionToken && sessionToken != 'null') {
-		const user = await ODB({
-			driver: 'mongodb',
-			collection: 'users',
-			query: { 'sessions': sessionToken }
-		});
-
-		if (user) return true
-		else return false
-	}
-};
+const validators = new Map()
 
 /**
  * Sets up a synced observer with the client and db. Synchronizes changes from
@@ -87,10 +70,10 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
  * @param {Function} [options.onEnter] - Callback executed when a client enters.
  * @param {Object} options.props - Additional properties passed to modules.
  */
-const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, props }) => {
-	await initODB();
+const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
+	const driver = mongodb(process.env.db, process.env.table);
+	const DB = database(driver);
 	const modules = await Modules(modulesDir);
-
 	server = server ? server = server() : http();
 
 	if (process.env.NODE_ENV === 'production') {
@@ -106,26 +89,18 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 	wss.on('connection', async (ws, req) => {
 		let sync;
 		let user;
-		let conProps;
+		let onConProps;
 		const sessionToken = Observer.mutable('');
 		const authenticated = Observer.mutable(false);
 
 		authenticated.watch(d => {
 			if (d.value) {
 				(async () => {
-					user = await ODB({
-						driver: 'mongodb',
-						collection: 'users',
-						query: { 'sessions': sessionToken.get() }
-					});
-					sync = await ODB({
-						driver: 'mongodb',
-						collection: 'state',
-						query: { userID: user.userID }
-					});
+					user = await DB.reuse('users', { 'sessions': sessionToken.get() });
+					sync = await DB.reuse('state', { id: user.observer.id });
 
 					if (onCon) {
-						conProps = await onCon(ws, req, user, sync, sessionToken);
+						onConProps = await onCon(ws, req, user, sync, sessionToken);
 					}
 
 					syncNetwork(authenticated, ws, sync);
@@ -134,6 +109,14 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 				ws.close();
 			}
 		});
+
+		const authenticate = async (sessionToken) => {
+			if (sessionToken && sessionToken != 'null') {
+				const user = await DB.reuse('users', { 'sessions': sessionToken });
+				if (user) return true
+				else return false
+			}
+		};
 
 		sessionToken.set(new URLSearchParams(req.url.split('?')[1]).get('sessionToken'));
 		const status = await authenticate(sessionToken.get());
@@ -164,13 +147,17 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter, pro
 				// TODO: Better way to organize props and distinguish between where different
 				// props are coming from, need to distinguish in case of conflicting prop names:
 
-				const result = await module.onMsg({
-					...(module.authenticated && { sync, user }),
-					...conProps,
-					...props,
-					...msg.props,
-					onEnter: msg.name === 'enter' ? onEnter : null,
-				});
+				const result = await module.onMsg(
+					msg.props,
+					onConProps,
+					{
+						authenticated: module.authenticated,
+						sync,
+						user,
+						onEnter: msg.name === 'enter' ? onEnter : null,
+						DB
+					},
+				)
 				ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
 			} catch (error) {
 				console.error(error);
