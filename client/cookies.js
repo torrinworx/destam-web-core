@@ -2,7 +2,7 @@
 // Listen for when web-core cookie is changed, re-init state if webcore cookie deleted (only deleted on signout)
 // document.addEventListener('cookiechange', async ({ detail: { newValue, oldValue } }) => {
 // });
-const cookieUpdates = () => {
+export const cookieUpdates = () => {
 	const parseCookieString = (cookieString) => {
 		const result = {};
 		cookieString.split('; ').forEach(cookie => {
@@ -10,20 +10,18 @@ const cookieUpdates = () => {
 			result[key] = value;
 		});
 		return result;
-	}
+	};
 
 	const areCookiesEqual = (cookieA, cookieB) => {
 		// Check that all keys and values are the same
-		if (Object.keys(cookieA).length !== Object.keys(cookieB).length) {
-			return false;
-		}
+		if (Object.keys(cookieA).length !== Object.keys(cookieB).length) return false;
 		for (const key in cookieA) {
 			if (cookieA[key] !== cookieB[key]) {
 				return false;
 			}
 		}
 		return true;
-	}
+	};
 
 	let lastCookie = parseCookieString(document.cookie);
 	const expando = '_cookie';
@@ -62,4 +60,8 @@ const cookieUpdates = () => {
 	};
 };
 
-export default cookieUpdates;
+export const getCookie = (name) => {
+	const value = `; ${document.cookie}`;
+	const parts = value.split(`; ${name}=`);
+	if (parts.length === 2) return parts.pop().split(';').shift();
+};

@@ -37,7 +37,7 @@ coreServer(
 
 **client.jsx**
 ```javascript
-import { coreClient } from 'destam-web-core/client';
+import { core } from 'destam-web-core/client';
 
 const App = ({ state }) => {
 	const counter = state.client.counter.def(0);
@@ -52,7 +52,7 @@ const App = ({ state }) => {
 
 const NotFound = () => <>Not Found 404</>;
 
-coreClient(App, NotFound);
+core(App, NotFound);
 ```
 
 **index.html**

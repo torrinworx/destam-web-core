@@ -4,13 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import indexeddb from 'destam-db/driver/indexeddb.js';
 import { Observer, OObject, createNetwork } from 'destam';
 
-import { parse, stringify } from '../common/clone.js';
-
-export const getCookie = (name) => {
-	const value = `; ${document.cookie}`;
-	const parts = value.split(`; ${name}=`);
-	if (parts.length === 2) return parts.pop().split(';').shift();
-};
+import { parse, stringify } from '../common/clone';
+import { getCookie, cookieUpdates } from './cookies';
 
 let ws;
 export const initWS = () => {
@@ -27,7 +22,7 @@ export const initWS = () => {
 	});
 };
 
-export const jobRequest = ({ name, props }) => {
+export const modReq = ({ name, props }) => {
 	return new Promise(async (resolve, reject) => {
 		const msgID = uuidv4();
 
@@ -63,74 +58,13 @@ export const jobRequest = ({ name, props }) => {
 	});
 };
 
-// stolen from: https://stackoverflow.com/a/63952971/15739035
-const cookieUpdates = () => {
-	const parseCookieString = (cookieString) => {
-		const result = {};
-		cookieString.split('; ').forEach(cookie => {
-			const [key, value] = cookie.split('=');
-			result[key] = value;
-		});
-		return result;
-	}
-
-	const areCookiesEqual = (cookieA, cookieB) => {
-		// Check that all keys and values are the same
-		if (Object.keys(cookieA).length !== Object.keys(cookieB).length) {
-			return false;
-		}
-		for (const key in cookieA) {
-			if (cookieA[key] !== cookieB[key]) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	let lastCookie = parseCookieString(document.cookie);
-	const expando = '_cookie';
-	let nativeCookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
-
-	Object.defineProperty(Document.prototype, expando, nativeCookieDesc);
-	Object.defineProperty(Document.prototype, 'cookie', {
-		enumerable: true,
-		configurable: true,
-		get() {
-			return this[expando];
-		},
-		set(value) {
-			this[expando] = value;
-			let cookie = parseCookieString(this[expando]);
-			if (!areCookiesEqual(cookie, lastCookie)) {
-				try {
-					let detail = { oldValue: lastCookie, newValue: cookie };
-					this.dispatchEvent(new CustomEvent('cookiechange', {
-						detail: detail
-					}));
-					channel.postMessage(detail);
-				} finally {
-					lastCookie = cookie;
-				}
-			}
-		}
-	});
-
-	const channel = new BroadcastChannel('cookie-channel');
-	channel.onmessage = (e) => {
-		lastCookie = e.data.newValue;
-		document.dispatchEvent(new CustomEvent('cookiechange', {
-			detail: e.data
-		}));
-	};
-};
-
 export const syncNetwork = async (state) => {
 	let network;
 	const fromServer = {};
 
 	ws.addEventListener('message', msg => {
 		msg = parse(msg.data);
-		// look for sync here because other data is returned from the server for jobRequest:
+		// look for sync here because other data is returned from the server for modReq:
 		if (msg.name === 'sync') {
 			const serverChanges = parse(msg.result);
 			if (!state.sync) {
@@ -143,7 +77,7 @@ export const syncNetwork = async (state) => {
 							changes,
 							{ observerRefs: observerRefs, observerNetwork: network }
 						);
-						await jobRequest({ name: 'sync', props: { clientChanges: clientChanges } })
+						await modReq({ name: 'sync', props: { clientChanges: clientChanges } })
 					}, 1000 / 30, arg => arg === fromServer);
 
 					window.addEventListener('unload', () => {
@@ -170,7 +104,7 @@ export const syncNetwork = async (state) => {
 	});
 };
 
-export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing' }) => {
+export const core = async ({ App, Fallback, pages, defaultPage = 'Landing' }) => {
 	const driver = indexeddb('webcore');
 	const DB = database(driver);
 	const client = await DB.reuse('client', { state: 'client' });
@@ -233,10 +167,10 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 	});
 
 	const token = getCookie('webcore') || '';
-	if (token) (async () => await jobRequest({ name: 'sync' }))();
+	if (token) (async () => await modReq({ name: 'sync' }))();
 
 	state.enter = async (email, password) => {
-		const response = await jobRequest({
+		const response = await modReq({
 			name: 'enter',
 			props: {
 				email: email.get(),
@@ -246,12 +180,12 @@ export const coreClient = async ({ App, Fallback, pages, defaultPage = 'Landing'
 		if (response.sessionToken) {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
 			document.cookie = `webcore=${response.sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
-			await jobRequest({ name: 'sync' })
+			await modReq({ name: 'sync' })
 		}
 		return response;
 	};
 
-	state.check = async (email) => await jobRequest({
+	state.check = async (email) => await modReq({
 		name: 'check',
 		props: { email: email.get() }
 	});

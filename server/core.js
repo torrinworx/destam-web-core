@@ -70,7 +70,7 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
  * @param {Function} [options.onEnter] - Callback executed when a client enters.
  * @param {Object} options.props - Additional properties passed to modules.
  */
-const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
+const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
 	const driver = mongodb(process.env.db, process.env.table);
 	const DB = database(driver);
 	const modules = await Modules(modulesDir);
@@ -87,6 +87,8 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter }) =
 	const wss = new WebSocketServer({ server });
 
 	wss.on('connection', async (ws, req) => {
+		console.log(req);
+
 		let sync;
 		let user;
 		let onConProps;
@@ -94,20 +96,19 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter }) =
 		const authenticated = Observer.mutable(false);
 
 		authenticated.watch(d => {
-			if (d.value) {
-				(async () => {
-					user = await DB.reuse('users', { 'sessions': sessionToken.get() });
-					sync = await DB.reuse('state', { id: user.observer.id });
+			if (d.value) (async () => {
+				const userQuery = await DB.query('users', { sessions: sessionToken.get() });
+				user = await DB.instance(userQuery);
 
-					if (onCon) {
-						onConProps = await onCon(ws, req, user, sync, sessionToken);
-					}
+				console.log('user in coreServer:')
 
-					syncNetwork(authenticated, ws, sync);
-				})();
-			} else if (sync) {
-				ws.close();
-			}
+				sync = await DB.reuse('state', { id: user.observer.id });
+
+				if (onCon) onConProps = await onCon(ws, req, user, sync, sessionToken);
+
+				syncNetwork(authenticated, ws, sync);
+			})();
+			else if (sync) ws.close();
 		});
 
 		const authenticate = async (sessionToken) => {
@@ -167,4 +168,4 @@ const coreServer = async ({ server = null, root, modulesDir, onCon, onEnter }) =
 	});
 };
 
-export default coreServer;
+export default core;
