@@ -2,7 +2,6 @@ import 'dotenv/config';
 import database from 'destam-db';
 import { WebSocketServer } from 'ws';
 import mongodb from 'destam-db/driver/mongodb.js';
-import { createServer as createViteServer } from 'vite';
 import { Observer, OObject, createNetwork } from 'destam';
 
 import Modules from './modules.js';
@@ -76,9 +75,9 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
 	const modules = await Modules(modulesDir);
 	server = server ? server = server() : http();
 
-	if (process.env.NODE_ENV === 'production') {
-		server.production({ root });
-	} else {
+	if (process.env.ENV === 'production') server.production({ root });
+	else {
+		const { createServer: createViteServer } = await import('vite');
 		const vite = await createViteServer({ server: { middlewareMode: 'html' } });
 		server.development({ vite });
 	}
@@ -86,67 +85,85 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
 	server = await server.listen();
 	const wss = new WebSocketServer({ server });
 
+	// on each connection to a client
 	wss.on('connection', async (ws, req) => {
-		console.log(req);
-
 		let sync;
 		let user;
 		let onConProps;
-		const sessionToken = Observer.mutable('');
+		const token = Observer.mutable(new URLSearchParams(req.url.split('?')[1]).get('token'));
 		const authenticated = Observer.mutable(false);
 
 		authenticated.watch(d => {
 			if (d.value) (async () => {
-				const userQuery = await DB.query('users', { sessions: sessionToken.get() });
-				user = await DB.instance(userQuery);
+				let session = await DB.query('sessions', { token: token.get() });
+				session = await DB.instance(session);
 
-				console.log('user in coreServer:')
+				let user = await DB.query('users', { id: session.user });
+				user = await DB.instance(user);
+
+				console.log('user in coreServer:', user);
 
 				sync = await DB.reuse('state', { id: user.observer.id });
 
-				if (onCon) onConProps = await onCon(ws, req, user, sync, sessionToken);
+				if (onCon) onConProps = await onCon(ws, req, user, sync, token);
 
 				syncNetwork(authenticated, ws, sync);
 			})();
 			else if (sync) ws.close();
 		});
 
-		const authenticate = async (sessionToken) => {
-			if (sessionToken && sessionToken != 'null') {
-				const user = await DB.reuse('users', { 'sessions': sessionToken });
-				if (user) return true
-				else return false
+		const authenticate = async (token) => {
+			try {
+				console.log('this thing: ', token && token !== 'null');
+				if (token && token !== 'null') {
+					let session = await DB.query('sessions', { token });
+					console.log('session: ', session);
+					if (!session) return false;
+
+					session = await DB.instance(session);
+					console.log(session);
+					console.log('date thingy: ', Date.now() <  session.expires);
+
+
+					if (new Date() < session.expires) {
+						const user = await DB.reuse('users', { id: session.query.user });
+
+						if (user) return true;
+						else return false;
+					} else return false;
+				} else return false;
+			} catch (error) {
+				console.error('Error during authentication:', error);
+				return false;
 			}
 		};
 
-		sessionToken.set(new URLSearchParams(req.url.split('?')[1]).get('sessionToken'));
-		const status = await authenticate(sessionToken.get());
+		const status = await authenticate(token.get());
 		authenticated.set(status);
 
 		ws.on('message', async msg => {
 			try {
 				msg = parse(msg);
 
-				if (!authenticated.get() && msg.sessionToken) {
-					sessionToken.set(msg.sessionToken);
-					const status = await authenticate(sessionToken.get());
+				if (!authenticated.get() && msg.token && msg.token != token.get()) {
+					token.set(msg.token);
+					const status = await authenticate(token.get());
 					authenticated.set(status);
 				}
+
+				console.log(msg, authenticated.get());
 
 				if (msg.name === 'sync') return;
 
 				const module = modules[msg.name];
-				// module must have at least onMsg or onMsgQ to be called by client.
-				if (!module || (!module.onMsg && !module.onMsgQ)) {
+				// module must have onMsg to be called by client.
+				if (!module || (!module.onMsg)) {
 					throw new Error(`Module not found: ${msg.name}`);
 				}
 
 				if (!authenticated.get() && module.authenticated !== false) {
 					throw new Error(`Unauthorized access attempt to module: ${msg.name}`);
 				}
-
-				// TODO: Better way to organize props and distinguish between where different
-				// props are coming from, need to distinguish in case of conflicting prop names:
 
 				const result = await module.onMsg(
 					msg.props,
@@ -161,8 +178,8 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
 				)
 				ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
 			} catch (error) {
-				console.error(error);
 				ws.send(JSON.stringify({ error: error.message, id: msg.id }));
+				throw new Error(`An error occured in module ${msg.name}: `, error);
 			}
 		});
 	});

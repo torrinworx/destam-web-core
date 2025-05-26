@@ -9,10 +9,10 @@ import { getCookie, cookieUpdates } from './cookies';
 
 let ws;
 export const initWS = () => {
-	const tokenValue = getCookie('webcore') || '';
+	const token = getCookie('webcore') || '';
 	const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-	const wsURL = tokenValue
-		? `${protocol}${window.location.hostname}:${window.location.port}/?sessionToken=${encodeURIComponent(tokenValue)}`
+	const wsURL = token
+		? `${protocol}${window.location.hostname}:${window.location.port}/?token=${encodeURIComponent(token)}`
 		: `${protocol}${window.location.hostname}:${window.location.port}`;
 	ws = new WebSocket(wsURL);
 	return new Promise((resolve, reject) => {
@@ -43,7 +43,7 @@ export const modReq = ({ name, props }) => {
 			try {
 				ws.send(JSON.stringify({
 					name: name,
-					sessionToken: getCookie('webcore') || '',
+					token: getCookie('webcore') || '',
 					id: msgID,
 					props
 				}));
@@ -177,9 +177,10 @@ export const core = async ({ App, Fallback, pages, defaultPage = 'Landing' }) =>
 				password: password.get(),
 			}
 		});
-		if (response.sessionToken) {
+
+		if (response.token) {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-			document.cookie = `webcore=${response.sessionToken}; expires=${expires}; path=/; SameSite=Lax`;
+			document.cookie = `webcore=${response.token}; expires=${expires}; path=/; SameSite=Lax`;
 			await modReq({ name: 'sync' })
 		}
 		return response;
