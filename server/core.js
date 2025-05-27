@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import database from 'destam-db';
 import { WebSocketServer } from 'ws';
 import mongodb from 'destam-db/driver/mongodb.js';
@@ -69,20 +68,20 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
  * @param {Function} [options.onEnter] - Callback executed when a client enters.
  * @param {Object} options.props - Additional properties passed to modules.
  */
-const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
-	const driver = mongodb(process.env.db, process.env.table);
+const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table, env, port }) => {
+	const driver = mongodb(db, table);
 	const DB = database(driver);
 	const modules = await Modules(modulesDir);
 	server = server ? server = server() : http();
 
-	if (process.env.ENV === 'production') server.production({ root });
+	if (env === 'production') server.production({ root });
 	else {
 		const { createServer: createViteServer } = await import('vite');
 		const vite = await createViteServer({ server: { middlewareMode: 'html' } });
 		server.development({ vite });
 	}
 
-	server = await server.listen();
+	server = await server.listen(port);
 	const wss = new WebSocketServer({ server });
 
 	// on each connection to a client
@@ -100,9 +99,6 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
 
 				let user = await DB.query('users', { id: session.user });
 				user = await DB.instance(user);
-
-				console.log('user in coreServer:', user);
-
 				sync = await DB.reuse('state', { id: user.observer.id });
 
 				if (onCon) onConProps = await onCon(ws, req, user, sync, token);
@@ -114,16 +110,12 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
 
 		const authenticate = async (token) => {
 			try {
-				console.log('this thing: ', token && token !== 'null');
 				if (token && token !== 'null') {
 					let session = await DB.query('sessions', { token });
 					console.log('session: ', session);
 					if (!session) return false;
 
 					session = await DB.instance(session);
-					console.log(session);
-					console.log('date thingy: ', Date.now() <  session.expires);
-
 
 					if (new Date() < session.expires) {
 						const user = await DB.reuse('users', { id: session.query.user });
@@ -133,7 +125,6 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
 					} else return false;
 				} else return false;
 			} catch (error) {
-				console.error('Error during authentication:', error);
 				return false;
 			}
 		};
@@ -150,8 +141,6 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter }) => {
 					const status = await authenticate(token.get());
 					authenticated.set(status);
 				}
-
-				console.log(msg, authenticated.get());
 
 				if (msg.name === 'sync') return;
 

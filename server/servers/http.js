@@ -27,63 +27,62 @@ const mimeTypes = {
 export default () => {
 	let root;
 	let vite;
-
-	const server = http.createServer((req, res) => {
-		if (process.env.NODE_ENV === 'production') {
-			const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-			let filePath = path.join(root, parsedUrl.pathname);
-
-			fs.stat(filePath, (err, stats) => {
-				if (!err && stats.isFile()) {
-					// Serve static file
-					const extname = path.extname(filePath);
-					const contentType = mimeTypes[extname] || 'application/octet-stream';
-					fs.readFile(filePath, (err, content) => {
-						if (err) {
-							res.writeHead(500);
-							res.end(`Error: ${err.code} ..\n`);
-							console.error('Error serving the file:', err);
-						} else {
-							res.writeHead(200, { 'Content-Type': contentType });
-							res.end(content, 'utf-8');
-						}
-					});
-				} else {
-					// Fallback to index.html for client-side routing
-					fs.readFile(path.join(root, 'index.html'), (err, content) => {
-						if (err) {
-							res.writeHead(500);
-							res.end(`Error: ${err.code} ..\n`);
-							console.error('Error serving index.html:', err);
-						} else {
-							res.writeHead(200, { 'Content-Type': 'text/html' });
-							res.end(content, 'utf-8');
-						}
-					});
-				}
-			});
-		} else if (process.env.NODE_ENV === 'development') {
-			// Handle requests in development mode with Vite
-			vite.middlewares(req, res, (err) => {
-				if (err) {
-					res.writeHead(500);
-					res.end(`Error: ${err.message} ..\n`);
-					vite.ssrFixStacktrace(err);
-					console.error('Error during Vite middlewares:', err);
-				}
-			});
-		}
-	});
+	let server;
 
 	return {
 		production: ({ root: rootPath }) => {
 			root = rootPath;
+
+			server = http.createServer((req, res) => {
+				const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+				let filePath = path.join(root, parsedUrl.pathname);
+
+				fs.stat(filePath, (err, stats) => {
+					if (!err && stats.isFile()) {
+						// Serve static file
+						const extname = path.extname(filePath);
+						const contentType = mimeTypes[extname] || 'application/octet-stream';
+						fs.readFile(filePath, (err, content) => {
+							if (err) {
+								res.writeHead(500);
+								res.end(`Error: ${err.code} ..\n`);
+								console.error('Error serving the file:', err);
+							} else {
+								res.writeHead(200, { 'Content-Type': contentType });
+								res.end(content, 'utf-8');
+							}
+						});
+					} else {
+						// Fallback to index.html for client-side routing
+						fs.readFile(path.join(root, 'index.html'), (err, content) => {
+							if (err) {
+								res.writeHead(500);
+								res.end(`Error: ${err.code} ..\n`);
+								console.error('Error serving index.html:', err);
+							} else {
+								res.writeHead(200, { 'Content-Type': 'text/html' });
+								res.end(content, 'utf-8');
+							}
+						});
+					}
+				});
+			});
 		},
 		development: ({ vite: viteInstance }) => {
 			vite = viteInstance;
+			server = http.createServer((req, res) => {
+				vite.middlewares(req, res, (err) => {
+					if (err) {
+						res.writeHead(500);
+						res.end(`Error: ${err.message} ..\n`);
+						vite.ssrFixStacktrace(err);
+						console.error('Error during Vite middlewares:', err);
+					}
+				})
+			});
 		},
-		listen: () => server.listen(process.env.PORT || 3000, () => {
-			console.log(`Http is serving on http://localhost:${process.env.PORT || 3000}/`);
+		listen: (port) => server.listen(port || 3000, () => {
+			console.log(`Http is serving on http://localhost:${port || 3000}/`);
 		})
 	}
 };

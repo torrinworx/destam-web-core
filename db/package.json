@@ -22,9 +22,7 @@
     }
   },
   "dependencies": {
-    "heap": "^0.2.7",
-    "i": "^0.3.7",
-    "npm": "^11.3.0"
+    "heap": "^0.2.7"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.0.1",

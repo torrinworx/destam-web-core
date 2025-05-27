@@ -21,12 +21,11 @@
         "destam": "^0.5.3",
         "destam-dom": "^0.11.3",
         "destam-db": "file:db",
-        "dotenv": "^16.4.5",
         "uuid": "^11.0.3",
-        "vite": "^5.4.10",
         "ws": "^8.18.0"
     },
     "devDependencies": {
+        "vite": "^5.4.10",
         "@babel/core": "^7.25.2",
         "@babel/generator": "^7.25.6",
         "@babel/parser": "^7.25.6",
