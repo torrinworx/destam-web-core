@@ -74,6 +74,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 	const modules = await Modules(modulesDir);
 	server = server ? server = server() : http();
 
+
 	if (env === 'production') server.production({ root });
 	else {
 		const { createServer: createViteServer } = await import('vite');
@@ -92,18 +93,28 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		const token = Observer.mutable(new URLSearchParams(req.url.split('?')[1]).get('token'));
 		const authenticated = Observer.mutable(false);
 
-		authenticated.watch(d => {
-			if (d.value) (async () => {
-				let session = await DB.query('sessions', { token: token.get() });
-				session = await DB.instance(session);
+		authenticated.effect(a => {
+			if (a) (async () => {
+				try {
+					let session = await DB.query('sessions', { token: token.get() });
+					if (!session) throw new Error('Session not found.');
 
-				let user = await DB.query('users', { id: session.user });
-				user = await DB.instance(user);
-				sync = await DB.reuse('state', { id: user.observer.id });
+					session = await DB.instance(session);
 
-				if (onCon) onConProps = await onCon(ws, req, user, sync, token);
+					let user = await DB.query('users', { uuid: session.query.user });
+					if (!user) throw new Error('User not found.');
 
-				syncNetwork(authenticated, ws, sync);
+					user = await DB.instance(user);
+
+					sync = await DB.reuse('state', { user: session.query.user });
+
+					if (onCon) onConProps = await onCon(ws, req, user, sync, token);
+
+					syncNetwork(authenticated, ws, sync);
+				} catch (error) {
+					console.error('Error in authentication watch:', error.message);
+					if (sync) ws.close();
+				}
 			})();
 			else if (sync) ws.close();
 		});
@@ -112,19 +123,18 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			try {
 				if (token && token !== 'null') {
 					let session = await DB.query('sessions', { token });
-					console.log('session: ', session);
 					if (!session) return false;
 
 					session = await DB.instance(session);
 
 					if (new Date() < session.expires) {
-						const user = await DB.reuse('users', { id: session.query.user });
-
+						const user = await DB.reuse('users', { uuid: session.query.user });
 						if (user) return true;
 						else return false;
 					} else return false;
 				} else return false;
 			} catch (error) {
+				console.error('Error during authentication:', error.message);
 				return false;
 			}
 		};
@@ -168,7 +178,8 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 				ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
 			} catch (error) {
 				ws.send(JSON.stringify({ error: error.message, id: msg.id }));
-				throw new Error(`An error occured in module ${msg.name}: `, error);
+				console.error(error);
+				throw new Error(`An error occured in module ${msg.name}.`);
 			}
 		});
 	});

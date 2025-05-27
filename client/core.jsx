@@ -64,6 +64,7 @@ export const syncNetwork = async (state) => {
 
 	ws.addEventListener('message', msg => {
 		msg = parse(msg.data);
+		console.log(msg);
 		// look for sync here because other data is returned from the server for modReq:
 		if (msg.name === 'sync') {
 			const serverChanges = parse(msg.result);

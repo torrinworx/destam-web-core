@@ -3,7 +3,7 @@ export default () => {
 		authenticated: false,
 		onMsg: async ({ email }, _, { DB }) => {
 			try {
-				const user = await DB('users', { 'email': email });
+				const user = await DB.query('users', { 'email': email });
 				if (user) return true;
 				else return false;
 			} catch (e) {
