@@ -2,7 +2,6 @@ import fs from 'fs';
 import http from 'http';
 import path from 'path';
 
-// Simple work around to avoid adding another library.
 const mimeTypes = {
 	'.html': 'text/html',
 	'.js': 'application/javascript',
@@ -21,7 +20,6 @@ const mimeTypes = {
 	'.xml': 'application/xml',
 	'.pdf': 'application/pdf',
 	'.txt': 'text/plain',
-	// Add more as needed
 };
 
 export default () => {
@@ -82,7 +80,7 @@ export default () => {
 			});
 		},
 		listen: (port) => server.listen(port || 3000, () => {
-			console.log(`Http is serving on http://localhost:${port || 3000}/`);
+			console.log(`destam-web-core running on http://localhost:${port || 3000}/ using http server.`);
 		})
 	}
 };

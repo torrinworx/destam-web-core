@@ -39,7 +39,7 @@ export default () => {
 			});
 		},
 		listen: (port) => app.listen(port || 3000, () => {
-			console.log(`Express is serving on http://localhost:${port || 3000}/`);
+			console.log(`destam-web-core running on http://localhost:${port || 3000}/ using express.js server.`);
 		})
 	}
 };

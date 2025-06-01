@@ -96,12 +96,12 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		authenticated.effect(a => {
 			if (a) (async () => {
 				try {
-					let session = await DB.query('sessions', { token: token.get() });
+					let session = await DB.query('sessions', { uuid: token.get() });
 					if (!session) throw new Error('Session not found.');
 
 					session = await DB.instance(session);
 
-					let user = await DB.query('users', { uuid: session.query.user });
+					user = await DB.query('users', { uuid: session.query.user });
 					if (!user) throw new Error('User not found.');
 
 					user = await DB.instance(user);
@@ -122,13 +122,13 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		const authenticate = async (token) => {
 			try {
 				if (token && token !== 'null') {
-					let session = await DB.query('sessions', { token });
+					let session = await DB.query('sessions', { uuid: token });
 					if (!session) return false;
 
 					session = await DB.instance(session);
 
 					if (new Date() < session.expires) {
-						const user = await DB.reuse('users', { uuid: session.query.user });
+						user = await DB.reuse('users', { uuid: session.query.user });
 						if (user) return true;
 						else return false;
 					} else return false;
@@ -146,7 +146,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			try {
 				msg = parse(msg);
 
-				if (!authenticated.get() && msg.token && msg.token != token.get()) {
+				if (!authenticated.get() && msg.token && msg.token !== token.get()) {
 					token.set(msg.token);
 					const status = await authenticate(token.get());
 					authenticated.set(status);
@@ -155,31 +155,31 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 				if (msg.name === 'sync') return;
 
 				const module = modules[msg.name];
-				// module must have onMsg to be called by client.
-				if (!module || (!module.onMsg)) {
-					throw new Error(`Module not found: ${msg.name}`);
+				// Check if the module exists and has an onMsg function.
+				if (!module || !module.onMsg) {
+					return ws.send(JSON.stringify({ error: `Module not found: ${msg.name}`, id: msg.id }));
 				}
 
 				if (!authenticated.get() && module.authenticated !== false) {
-					throw new Error(`Unauthorized access attempt to module: ${msg.name}`);
+					console.warn(`Unauthorized access attempt to module: ${msg.name}, msg id: ${msg.id}`);
+					return ws.send(JSON.stringify({ error: `Module not found: ${msg.name}`, id: msg.id }));
 				}
 
 				const result = await module.onMsg(
 					msg.props,
-					onConProps,
+					onConProps ? onConProps : null,
 					{
-						authenticated: module.authenticated,
 						sync,
 						user,
 						onEnter: msg.name === 'enter' ? onEnter : null,
-						DB
-					},
-				)
-				ws.send(JSON.stringify({ name: msg.name, result: result, id: msg.id }));
+						DB,
+						env,
+					}
+				);
+				ws.send(JSON.stringify({ result: result, id: msg.id }));
 			} catch (error) {
 				ws.send(JSON.stringify({ error: error.message, id: msg.id }));
-				console.error(error);
-				throw new Error(`An error occured in module ${msg.name}.`);
+				console.error(`An error occurred processing message ID ${msg.id}:`, error.message);
 			}
 		});
 	});

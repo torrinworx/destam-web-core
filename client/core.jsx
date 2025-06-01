@@ -22,41 +22,39 @@ export const initWS = () => {
 	});
 };
 
-export const modReq = ({ name, props }) => {
-	return new Promise(async (resolve, reject) => {
-		const msgID = uuidv4();
+export const modReq = (name, props) => new Promise(async (resolve, reject) => {
+	const msgID = uuidv4();
 
-		const handleMessage = (event) => {
-			const response = JSON.parse(event.data);
-			if (response.id === msgID) {
-				ws.removeEventListener('message', handleMessage);
+	const handleMessage = (event) => {
+		const response = JSON.parse(event.data);
+		if (response.id === msgID) {
+			ws.removeEventListener('message', handleMessage);
 
-				if (response.error) {
-					console.error(response.error);
-				} else {
-					resolve(response.result);
-				}
+			if (response.error) {
+				console.error(response.error);
+			} else {
+				resolve(response.result);
 			}
-		};
+		}
+	};
 
-		const sendMessage = () => {
-			try {
-				ws.send(JSON.stringify({
-					name: name,
-					token: getCookie('webcore') || '',
-					id: msgID,
-					props
-				}));
-			} catch (error) {
-				reject(new Error('Issue with server module request: ', error));
-			}
+	const sendMessage = () => {
+		try {
+			ws.send(JSON.stringify({
+				name: name,
+				token: getCookie('webcore') || '',
+				id: msgID,
+				props: props ? props : null,
+			}));
+		} catch (error) {
+			reject(new Error('Issue with server module request: ', error));
+		}
 
-		};
+	};
 
-		ws.addEventListener('message', handleMessage);
-		sendMessage();
-	});
-};
+	ws.addEventListener('message', handleMessage);
+	sendMessage();
+});
 
 export const syncNetwork = async (state) => {
 	let network;
@@ -64,7 +62,6 @@ export const syncNetwork = async (state) => {
 
 	ws.addEventListener('message', msg => {
 		msg = parse(msg.data);
-		console.log(msg);
 		// look for sync here because other data is returned from the server for modReq:
 		if (msg.name === 'sync') {
 			const serverChanges = parse(msg.result);
@@ -78,7 +75,7 @@ export const syncNetwork = async (state) => {
 							changes,
 							{ observerRefs: observerRefs, observerNetwork: network }
 						);
-						await modReq({ name: 'sync', props: { clientChanges: clientChanges } })
+						await modReq('sync', { clientChanges: clientChanges })
 					}, 1000 / 30, arg => arg === fromServer);
 
 					window.addEventListener('unload', () => {
@@ -168,29 +165,29 @@ export const core = async ({ App, Fallback, pages, defaultPage = 'Landing' }) =>
 	});
 
 	const token = getCookie('webcore') || '';
-	if (token) (async () => await modReq({ name: 'sync' }))();
+	if (token) (async () => await modReq('sync'))();
 
 	state.enter = async (email, password) => {
-		const response = await modReq({
-			name: 'enter',
-			props: {
+		const response = await modReq(
+			'enter',
+			{
 				email: email.get(),
 				password: password.get(),
 			}
-		});
+		);
 
 		if (response.token) {
 			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
 			document.cookie = `webcore=${response.token}; expires=${expires}; path=/; SameSite=Lax`;
-			await modReq({ name: 'sync' })
+			await modReq('sync')
 		}
 		return response;
 	};
 
-	state.check = async (email) => await modReq({
-		name: 'check',
-		props: { email: email.get() }
-	});
+	state.check = async (email) => await modReq(
+		'check',
+		{ email: email.get() }
+	);
 
 	state.leave = () => {
 		document.cookie = 'webcore=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax';
