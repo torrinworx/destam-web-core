@@ -74,7 +74,6 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 	const modules = await Modules(modulesDir);
 	server = server ? server = server() : http();
 
-
 	if (env === 'production') server.production({ root });
 	else {
 		const { createServer: createViteServer } = await import('vite');

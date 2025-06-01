@@ -3,14 +3,10 @@ import bcryptjs from 'bcryptjs';
 const createSession = async (DB, user) => {
 	const expires = new Date();
 	expires.setMonth(expires.getMonth() + 1);
-
 	let session = await DB('sessions');
-
 	session.query.user = user.query.uuid;
-
 	session.expires = expires;
 	session.status = true;
-
 	return session.query.uuid;
 };
 
