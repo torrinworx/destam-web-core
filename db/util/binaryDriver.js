@@ -26,6 +26,8 @@ import OObject from 'destam/Object.js';
 import UUID from 'destam/UUID.js';
 import Observer from 'destam/Observer.js';
 
+import {Delete} from 'destam/Events';
+
 import '../message/observers.js';
 import '../message/primitives.js';
 
@@ -52,23 +54,23 @@ const mapAsyncIterator = (iter, map) => ({
 });
 
 const map = (table, isNew, currentTransactions, readonly, result) => {
-	const stateGovernor = (obs) => {
-		if (readonly) {
-			return Observer.immutable(null);
-		}
-
-		return Observer(() => obs.get(), v => obs.set(v), (listener, governor) => obs.register_(listener, (info, child) => {
+	const stateGovernor = obs => Observer(
+		() => obs.get(),
+		v => obs.set(v),
+		(listener, governor) => obs.register_(listener, (info, child) => {
 			const str = child.query_;
 			if (typeof str === 'string' && str[0] === '$') return false;
 			return governor(info, child);
-		}));
-	};
+		})
+	);
 
 	const query = result.query;
 	let network, instance, deltaLength = 0;
 
 	let flushing = null;
 	const flush = (flushType, changes, observerRefs) => {
+		assert(!readonly);
+
 		if (flushing) return [changes, observerRefs];
 
 		flushing = (async () => {
@@ -117,7 +119,7 @@ const map = (table, isNew, currentTransactions, readonly, result) => {
 	};
 
 	const queryNetwork = createNetwork(stateGovernor(query.observer));
-	queryNetwork.digest(flush.bind(null, FLUSH_TYPE_QUERY), SQUASH_TIME);
+	if (!readonly) queryNetwork.digest(flush.bind(null, FLUSH_TYPE_QUERY), SQUASH_TIME);
 
 	if (!query.uuid) {
 		query.uuid = UUID().toHex();
@@ -127,6 +129,8 @@ const map = (table, isNew, currentTransactions, readonly, result) => {
 	return {
 		query,
 		flush: () => {
+			if (readonly) return;
+
 			if (flushing) return flushing;
 			return flush(0);
 		},
@@ -151,8 +155,15 @@ const map = (table, isNew, currentTransactions, readonly, result) => {
 					for await (const binary of deltas) {
 						try {
 							deltaLength++;
-							const decoded = await decode(binary, {
+							let decoded = await decode(binary, {
 								observerNetwork: network,
+								workaround: true,
+							});
+
+							// WORKAROUND FOR BUG FIXED IN 8d87d2bfe2575c2dbe2e75f834f3379883ff903d
+							// REMOVE ON NEXT DB MIGRATION
+							decoded = decoded.filter(delta => {
+								return !(delta instanceof Delete && delta.ref === null);
 							});
 
 							network.apply(decoded);
@@ -173,7 +184,7 @@ const map = (table, isNew, currentTransactions, readonly, result) => {
 					}
 				}
 
-				network.digest(flush.bind(null, FLUSH_TYPE_INSTANCE), SQUASH_TIME);
+				if (!readonly) network.digest(flush.bind(null, FLUSH_TYPE_INSTANCE), SQUASH_TIME);
 				return instance;
 			})();
 		},

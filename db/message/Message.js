@@ -632,7 +632,7 @@ export const decodeLean = (stream, options = {}) => {
 	});
 
 	const objects = builtins.slice();
-	const deferred = [];
+	let deferred = null, lastDeferred = null;
 
 	let binHandler;
 	let lastTypes, lastHuffTable;
@@ -844,7 +844,11 @@ export const decodeLean = (stream, options = {}) => {
 										}
 
 										objects.push(pre.value);
-										deferred.push({serializer, pre, dependencies});
+
+										const deferredNode = {serializer, pre, dependencies};
+										if (lastDeferred) lastDeferred.next = deferredNode;
+										lastDeferred = deferredNode;
+										if (!deferred) deferred = deferredNode;
 										this.index++;
 									}
 
@@ -903,8 +907,10 @@ export const decodeLean = (stream, options = {}) => {
 
 	const work = [createFrameReader()];
 	return runWorkQueue(stream, work).then(() => {
-		for (let i = 0; i < deferred.length; i++) {
-			let {serializer, pre, dependencies} = deferred[i];
+		while (deferred) {
+			const {serializer, pre, dependencies, next} = deferred;
+			deferred = next;
+
 			serializer.higher(
 				dependencies.value.map(index => {
 					return objects[index];
@@ -948,7 +954,8 @@ export const copy = (obj, options = {}) => {
 	const finishHandlers = [];
 	options.finish = cb => finishHandlers.push(cb);
 
-	const deferred = [];
+	let deferred = null, lastDeferred = null;
+
 	const dups = new Map([
 		true, false, null, undefined
 	].map(value => [value, {value}]));
@@ -974,7 +981,15 @@ export const copy = (obj, options = {}) => {
 					"Preallocation assertion length error: " + serializer.name);
 
 				ret.value = pre.value;
-				deferred.push({serializer, pre, dependencies: lowered.slice(serializer.alloc)});
+				const deferredNode = {
+					serializer,
+					pre,
+					dependencies: lowered.slice(serializer.alloc),
+				};
+
+				if (lastDeferred) lastDeferred.next = deferredNode;
+				lastDeferred = deferredNode;
+				if (!deferred) deferred = deferredNode;
 			} else {
 				assert(lowered.length === serializer.alloc,
 					"Higher assertion length error: " + serializer.name);
@@ -988,8 +1003,10 @@ export const copy = (obj, options = {}) => {
 
 	const ret = traverse(obj);
 
-	for (let i = 0; i < deferred.length; i++) {
-		let {serializer, pre, dependencies} = deferred[i];
+	while (deferred) {
+		let {serializer, pre, dependencies, next} = deferred;
+		deferred = next;
+
 		serializer.higher(
 			dependencies.map(dep => dep.value),
 			pre, options
@@ -1002,7 +1019,6 @@ export const copy = (obj, options = {}) => {
 
 	return ret.value;
 };
-
 
 export const createRegister = (extend) => {
 	const nameMapping = new Map(extend?.nameMapping);
@@ -1030,7 +1046,7 @@ export const createRegister = (extend) => {
 			}
 
 			let obj;
-			 if (props.extend) {
+			if (props.extend) {
 				let extending = nameMapping.get(props.extend);
 				assert(extending, "Extending object does not exist: " + props.extend);
 
@@ -1040,15 +1056,29 @@ export const createRegister = (extend) => {
 				}
 
 				obj = Object.create(extending);
+
+				// if we are extending, don't expect the parent's copy can work
+				obj.copy = null;
+
 				Object.assign(obj, props);
 
 				if (props.lower) {
 					obj.lower = value => props.lower(extending.lower(value));
 				}
 				if (props.higher) {
-					obj.higher = (next, pre, options) =>
-						Promise.resolve(extending.higher(next, pre, options))
-							.then(val => props.higher(val, pre, options));
+					if (obj.preallocate) {
+						obj.higher = (val, pre, options) => {
+							extending.higher(val, pre, options);
+
+							options.finish(() => {
+								props.higher(pre.value, pre, options);
+							});
+						};
+					} else {
+						obj.higher = (val, pre, options) =>
+							Promise.resolve(extending.higher(val, pre, options))
+								.then(val => props.higher(val, pre, options));
+					};
 				}
 			} else {
 				obj = props;

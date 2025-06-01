@@ -13,6 +13,35 @@ import * as Network from 'destam/Network.js';
 
 import './uuid.js';
 
+const bigIntLen = i => {
+	if (i < 0n) i = -i;
+
+	let n = 0x7Fn;
+	let l = 1;
+	while (n < i) {
+		n = (n << 8n) | 0xFFn;
+		l++;
+	}
+
+	return l;
+};
+
+const fromBigint = (i) => {
+	if (typeof i !== 'bigint') {
+		return i;
+	}
+
+	const n = bigIntLen(i);
+	const num = [0];
+
+	for (let ii = 0; ii < n; ii++) {
+		num[ii + 1] = Number(i & 0xFFn);
+		i >>= 8n;
+	}
+
+	return num;
+};
+
 const remap = (id, observerRemap) => {
 	if (!observerRemap || !id) {
 		return id;
@@ -31,7 +60,7 @@ register(null, {
 	lower: v => {
 		return [v[observerGetter].id];
 	},
-	higher: (v, _, {observerNetwork, observerNetworks, getObserverNetworks}) => {
+	higher: (v, _, {observerNetwork, observerNetworks, getObserverNetworks, workaround}) => {
 		if (!observerNetworks && observerNetwork) {
 			observerNetworks = [observerNetwork];
 		}
@@ -45,6 +74,10 @@ register(null, {
 		for (const network of observerNetworks) {
 			const reg = network.get(v[0]);
 			if (reg) return reg;
+		}
+
+		if (workaround) {
+			return OObject({id: UUID(), fake: true});
 		}
 
 		throw new Error("Could not find referenced id: " + v[0].toHex());
@@ -103,8 +136,6 @@ register(OObject, {
 			init[key] = value;
 			nodes.set(key, link);
 		}
-
-		return value;
 	},
 });
 
@@ -177,15 +208,13 @@ register(OArray, {
 		const init = reg.init_;
 
 		for (let i = 0; i < count; i++) {
-			const link = {reg_: reg, query_: v[i]};
+			const link = {reg_: reg, query_: fromBigint(v[i])};
 			const value = v[i + count];
 
 			indexes.push(link);
 			init.push(value);
 			Network.link(link, value?.[observerGetter]);
 		}
-
-		return value;
 	},
 });
 
@@ -230,8 +259,6 @@ register(OMap, {
 				link.query_ = element.id;
 			});
 		}
-
-		return value;
 	},
 });
 
@@ -245,6 +272,8 @@ const registerEvent = (event, name, encodeValue) => register(event, {
 		for (let o of encodeValue) {
 			val[o] = v[i++];
 		}
+
+		if (val.ref) val.ref = fromBigint(val.ref);
 
 		return val;
 	},

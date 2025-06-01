@@ -5,18 +5,16 @@ import OObject from 'destam/Object.js';
 import OArray from 'destam/Array.js';
 import UUID from 'destam/UUID.js';
 
-import { describe, it } from 'node:test';
+import {describe, it} from 'node:test';
 import assert from 'node:assert';
-import fs from '../driver/fs.js';
 import memory from '../driver/memory.js';
 import mongodb from '../driver/mongodb.js';
-import indexeddb from '../driver/indexeddb.js';
+import fs from '../driver/fs.js';
 import nodefs from 'node:fs/promises';
 
 import mapTable from '../util/mapTable.js';
 
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import 'fake-indexeddb/auto';
 
 const persistentDriver = (name, driver, cleanup) => cb => {
 	let counter = 0;
@@ -35,7 +33,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 			count++;
 
 			it(name, () => {
-				return Promise.resolve(cb()).then(v => (ok(), v)).catch(v => { ok(); throw v });
+				return Promise.resolve(cb()).then(v => (ok(), v)).catch(v => {ok(); throw v});
 			});
 		}, async () => {
 			const count = counter++;
@@ -63,13 +61,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		const driver = tmp.then(loc => fs(loc));
 
 		return persistentDriver('binaryDriver fs', driver, () => {
-			tmp.then(tmp => nodefs.rm(tmp, { recursive: true }));
-		});
-	})(),
-	(() => {
-		const driver = Promise.resolve(indexeddb('binaryDriverTest', 'db'));
-		return persistentDriver('binaryDriver indexedDB', driver, () => {
-			driver.then(d => d.close());
+			tmp.then(tmp => nodefs.rm(tmp, {recursive: true}));
 		});
 	})(),
 ].forEach(cb => cb((test, driver) => {
@@ -120,8 +112,8 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		thing.query.query = 1;
 
 		await db.flush(thing);
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
-		assert.deepStrictEqual(null, await database(store)('table', { query: 2 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
+		assert.deepStrictEqual(null, await database(store)('table', {query: 2}));
 	});
 
 	test('retrieve from query with uuid', async () => {
@@ -132,8 +124,8 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		thing.query.value = 1;
 
 		await db.flush(thing);
-		assert.deepStrictEqual(thing, await database(store)('table', { uuid: thing.query.uuid, value: 1 }));
-		assert.deepStrictEqual(null, await database(store)('table', { uuid: thing.query.uuid, value: 2 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {uuid: thing.query.uuid, value: 1}));
+		assert.deepStrictEqual(null, await database(store)('table', {uuid: thing.query.uuid, value: 2}));
 	});
 
 	test('retrieve from query uuid', async () => {
@@ -143,9 +135,9 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		const thing = await db('table');
 
 		await db.flush(thing);
-		assert.deepStrictEqual(thing, await database(store)('table', { uuid: thing.query.uuid }));
-		assert.deepStrictEqual(null, await database(store)('table', { uuid: "hello world" }));
-		assert.deepStrictEqual(null, await database(store)('table', { uuid: UUID().toHex() }));
+		assert.deepStrictEqual(thing, await database(store)('table', {uuid: thing.query.uuid}));
+		assert.deepStrictEqual(null, await database(store)('table', {uuid: "hello world"}));
+		assert.deepStrictEqual(null, await database(store)('table', {uuid: UUID().toHex()}));
 	});
 
 	test('retrieve from query twice and mess up', async () => {
@@ -157,8 +149,8 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		await db.flush(thing);
 
 		const db2 = database(store);
-		const one = db2('table', { uuid: thing.query.uuid });
-		const two = await db2('table', { uuid: thing.query.uuid });
+		const one = db2('table', {uuid: thing.query.uuid});
+		const two = await db2('table', {uuid: thing.query.uuid});
 		two.content = OObject();
 
 		assert.deepStrictEqual((await one).content, two.content);
@@ -176,7 +168,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		thing.content = 2;
 
 		await db.flush(thing);
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	test('flush content', async () => {
@@ -193,7 +185,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		thing.content = 3;
 		await db.flush(thing);
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	// designed to test building a cache
@@ -211,7 +203,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 			await db.flush(thing);
 		}
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	test('flush long content 2', async () => {
@@ -228,7 +220,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 			await db.flush(thing);
 		}
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	test('flush content concurrently', async () => {
@@ -252,7 +244,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 
 		await db.flush(thing);
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	test('flush content concurrently 2', async () => {
@@ -276,7 +268,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 
 		await db.flush(thing);
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	test('preserve duplicate oobjects', async () => {
@@ -293,7 +285,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 			await db.flush(thing);
 		}
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	test('modify queried', async () => {
@@ -306,11 +298,11 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		await db.flush(thing);
 
 		db = database(store);
-		thing = await db('table', { query: 1 });
+		thing = await db('table', {query: 1});
 		thing.val = 1;
 		await db.flush(thing);
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	test('modify queried multiple', async () => {
@@ -324,12 +316,12 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 
 		for (let i = 0; i < 10; i++) {
 			const db = database(store);
-			thing = await db('table', { query: 1 });
+			thing = await db('table', {query: 1});
 			thing.val = i;
 			await db.flush(thing);
 		}
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
 	});
 
 	test('dont save special', async () => {
@@ -346,7 +338,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 
 		const rem = Object.fromEntries(Object.entries(thing)
 			.filter(([key]) => key[0] !== '_' && key[0] !== '$'));
-		assert.deepStrictEqual(rem, { ...await database(store)('table', { query: 1 }) });
+		assert.deepStrictEqual(rem, {...await database(store)('table', {query: 1})});
 	});
 
 	test('multiple tables', async () => {
@@ -363,8 +355,8 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		await db.flush(thing);
 		await db.flush(thing2);
 
-		assert.deepStrictEqual(thing, await database(store)('table', { query: 1 }));
-		assert.deepStrictEqual(thing2, await database(store)('table2', { query: 1 }));
+		assert.deepStrictEqual(thing, await database(store)('table', {query: 1}));
+		assert.deepStrictEqual(thing2, await database(store)('table2', {query: 1}));
 	});
 
 	test('query single mutate', async () => {
@@ -377,7 +369,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		thing.thing = 1;
 		await db.flush(thing);
 
-		assert.deepStrictEqual(await database(store).query('Table', { thing: 1 }), thing);
+		assert.deepStrictEqual(await database(store).query('Table', {thing: 1}), thing);
 	});
 
 	test('retrieve multiple', async () => {
@@ -390,8 +382,8 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		await db.flush(thing);
 
 		const db2 = database(store);
-		assert(await db2('Table', { thing: 1 }) != null);
-		assert.equal(await db2('Table', { thing: 1 }), await db2('Table', { thing: 2 }));
+		assert(await db2('Table', {thing: 1}) != null);
+		assert.equal(await db2('Table', {thing: 1}), await db2('Table', {thing: 2}));
 	});
 
 	test('retrieve multiple none match', async () => {
@@ -404,7 +396,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		await db.flush(thing);
 
 		const db2 = database(store);
-		assert.equal(await db2('Table', { thing: 3 }), null);
+		assert.equal(await db2('Table', {thing: 3}), null);
 	});
 
 	test('retrieve multiple entries', async () => {
@@ -424,7 +416,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		const readdb = database(store);
 
 		for (let i = 0; i < 10; i++) {
-			assert.equal((await readdb('Table', { thing: i })).query.thing, i);
+			assert.equal((await readdb('Table', {thing: i})).query.thing, i);
 		}
 	});
 
@@ -443,7 +435,7 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 
 		await Promise.all(flushes);
 
-		const stuff = await database(store).queryAll('Table', { thing2: 1 });
+		const stuff = await database(store).queryAll('Table', {thing2: 1});
 		assert.equal(stuff.length, 5);
 		assert.deepStrictEqual(new Set(stuff.map(e => e.thing)), new Set([0, 1, 2, 3, 4]));
 	});

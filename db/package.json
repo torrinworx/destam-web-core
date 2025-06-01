@@ -10,14 +10,11 @@
   "author": "Alexander Orzechowski",
   "license": "MIT",
   "peerDependencies": {
-    "destam": "^0.5.3",
+    "destam": "^0.5.2",
     "mongodb": "^6.6.2"
   },
   "peerDependenciesMeta": {
     "mongodb": {
-      "optional": true
-    },
-    "idb": {
       "optional": true
     }
   },
@@ -25,7 +22,6 @@
     "heap": "^0.2.7"
   },
   "devDependencies": {
-    "fake-indexeddb": "^6.0.1",
     "mongodb-memory-server": "^10.1.4"
   }
 }
