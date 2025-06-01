@@ -10,7 +10,7 @@
   "author": "Alexander Orzechowski",
   "license": "MIT",
   "peerDependencies": {
-    "destam": "^0.5.2",
+    "destam": "^0.5.3",
     "mongodb": "^6.6.2"
   },
   "peerDependenciesMeta": {

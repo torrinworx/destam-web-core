@@ -26,7 +26,7 @@ import OObject from 'destam/Object.js';
 import UUID from 'destam/UUID.js';
 import Observer from 'destam/Observer.js';
 
-import {Delete} from 'destam/Events';
+import {Delete} from 'destam/Events.js';
 
 import '../message/observers.js';
 import '../message/primitives.js';
