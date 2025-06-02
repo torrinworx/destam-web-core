@@ -202,7 +202,7 @@ export const core = async ({ App, Fallback, pages, defaultPage = 'Landing' }) =>
 	};
 
 	const Router = (_, cleanup) => {
-		const auth = state.observer.path('sync').shallow().ignore();
+		const auth = state.observer.path('sync');
 
 		cleanup(openPage.effect(page => {
 			const newPath = `/${page.name}`;
