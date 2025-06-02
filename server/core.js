@@ -69,8 +69,8 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
  * @param {Object} options.props - Additional properties passed to modules.
  */
 const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table, env, port }) => {
-	const driver = mongodb(db, table);
-	const DB = database(driver);
+	const mongo = mongodb(db, table);
+	const DB = database(mongo);
 	const modules = await Modules(modulesDir);
 	server = server ? server = server() : http();
 
@@ -173,6 +173,8 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 						onEnter: msg.name === 'enter' ? onEnter : null,
 						DB,
 						env,
+						client: mongo.client,
+						database: await mongo.database,
 					}
 				);
 				ws.send(JSON.stringify({ result: result, id: msg.id }));
