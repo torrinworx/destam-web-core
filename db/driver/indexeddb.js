@@ -194,9 +194,11 @@ export default binaryDriver((table, readonly = false) => {
 					if (query) {
 						for (const delta of query) {
 							let ref = persistentObj;
-							const pathArr = delta.path();
+							const pathArr = delta.path;
 							for (let i = 0; i < pathArr.length - 1; i++) {
-								if (!ref[pathArr[i]]) ref[pathArr[i]] = {};
+								if (!ref[pathArr[i]] || typeof ref[pathArr[i]] !== 'object') {
+									ref[pathArr[i]] = {};
+								}
 								ref = ref[pathArr[i]];
 							}
 							ref[pathArr[pathArr.length - 1]] = delta.value;
@@ -243,9 +245,11 @@ export default binaryDriver((table, readonly = false) => {
 					if (query) {
 						for (const delta of query) {
 							let ref = doc.persistent;
-							const pathArr = delta.path();
+							const pathArr = delta.path;
 							for (let i = 0; i < pathArr.length - 1; i++) {
-								if (!ref[pathArr[i]]) ref[pathArr[i]] = {};
+								if (!ref[pathArr[i]] || typeof ref[pathArr[i]] !== 'object') {
+									ref[pathArr[i]] = {};
+								}
 								ref = ref[pathArr[i]];
 							}
 							ref[pathArr[pathArr.length - 1]] = delta.value;
