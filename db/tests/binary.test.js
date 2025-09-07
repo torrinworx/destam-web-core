@@ -332,12 +332,10 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		thing.query.query = 1;
 
 		thing._hidden = true;
-		thing.$hidden = true;
 
 		await db.flush(thing);
 
-		const rem = Object.fromEntries(Object.entries(thing)
-			.filter(([key]) => key[0] !== '_' && key[0] !== '$'));
+		const rem = Object.fromEntries(Object.entries(thing).filter(([key]) => key[0] !== '_'));
 		assert.deepStrictEqual(rem, {...await database(store)('table', {query: 1})});
 	});
 
@@ -457,5 +455,17 @@ const persistentDriver = (name, driver, cleanup) => cb => {
 		const stuff = await database(store).queryAll('Table', {});
 		assert.equal(stuff.length, 10);
 		assert.deepStrictEqual(new Set(stuff.map(e => e.thing)), new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+	});
+
+	test('binary store $', async () => {
+		const store = await driver();
+		const db = database(store);
+
+		const table = await db('Table');
+		table.$myValue = 1;
+		await db.flush(table);
+
+		const stuff = await database(store)('Table', {});
+		assert.equal(stuff.$myValue, table.$myValue);
 	});
 }));

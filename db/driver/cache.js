@@ -92,7 +92,7 @@ export default parent => {
 			cache.add(weak);
 			registry.register(item, {weak, paths});
 			item.query.observer.watch(delta => {
-				updateQuery(delta.path(), delta.prev, delta.value);
+				updateQuery(delta.path, delta.prev, delta.value);
 			});
 
 			updateQuery([], null, item.query);

@@ -74,7 +74,7 @@ export default binaryDriver((databaseLocation, table, readonly = false) => {
 
 					const persistent = {};
 					for (const delta of query) {
-						persistent[delta.path().join('.')] = delta.value;
+						persistent[delta.path.join('.')] = delta.value;
 					}
 
 					this.currentPart = new ObjectId();
@@ -94,7 +94,7 @@ export default binaryDriver((databaseLocation, table, readonly = false) => {
 							update.$set = {};
 
 							for (const delta of query) {
-								update.$set['persistent.' + delta.path().join('.')] = delta.value;
+								update.$set['persistent.' + delta.path.join('.')] = delta.value;
 							}
 						}
 

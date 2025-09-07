@@ -1,11 +1,11 @@
 import ReadStream from './read.js';
-import {encode as utf8Encode} from './utf8.js';
-import {assert} from 'destam/util.js';
+import { encode as utf8Encode } from './utf8.js';
+import { assert } from 'destam/util.js';
 
 const mask32Bits = (1n << 32n) - 1n;
 
 export default class WriteStream {
-	constructor (write, bufferSize) {
+	constructor(write, bufferSize) {
 		this.bufferSize = bufferSize || 1024 * 16;
 		this.writeout = write;
 		this.pos = 0;
@@ -13,7 +13,7 @@ export default class WriteStream {
 		this.closed = false;
 	}
 
-	ensureSpace (size) {
+	ensureSpace(size) {
 		let has = this.buffer ? this.buffer.length - this.pos : 0;
 		if (has < size) {
 			let newbuffer;
@@ -44,7 +44,7 @@ export default class WriteStream {
 		return old;
 	}
 
-	writeString (str) {
+	writeString(str) {
 		const bytes = utf8Encode(str);
 		bytes.push(0);
 
@@ -54,7 +54,7 @@ export default class WriteStream {
 		}
 	}
 
-	async flush (done = false) {
+	async flush(done = false) {
 		if (this.closed) {
 			throw new Error("the write stream is closed");
 		}
@@ -74,13 +74,13 @@ export default class WriteStream {
 		}
 	}
 
-	async maybeFlush () {
+	async maybeFlush() {
 		if (this.buffer && this.pos > this.buffer.length * 0.80) {
 			await this.flush();
 		}
 	}
 
-	async write (buffer) {
+	async write(buffer) {
 		if (Array.isArray(buffer)) {
 			buffer = new Uint8Array(buffer);
 		}
@@ -107,80 +107,80 @@ export default class WriteStream {
 		this.written += buffer.length;
 	}
 
-	toUint8Array () {
+	toUint8Array() {
 		assert(!this.writeout,
 			"this is only supported with a writestream that doesn't reference a stream");
 		return this.buffer ? new Uint8Array(this.buffer.buffer, 0, this.pos) : new Uint8Array(0);
 	}
 
-	writeDoubleBE (value) {
+	writeDoubleBE(value) {
 		const pos = this.ensureSpace(8);
 		this.dataview.setFloat64(pos, value, false);
 	}
-	writeDoubleLE (value) {
+	writeDoubleLE(value) {
 		const pos = this.ensureSpace(8);
 		this.dataview.setFloat64(pos, value, true);
 	}
-	writeFloatBE (value) {
+	writeFloatBE(value) {
 		const pos = this.ensureSpace(4);
 		this.dataview.setFloat32(pos, value, false);
 	}
-	writeFloatLE (value) {
+	writeFloatLE(value) {
 		const pos = this.ensureSpace(4);
 		this.dataview.setFloat32(pos, value, true);
 	}
-	writeInt8 (value) {
+	writeInt8(value) {
 		const pos = this.ensureSpace(1);
 		this.dataview.setInt8(pos, value);
 	}
-	writeInt16BE (value) {
+	writeInt16BE(value) {
 		const pos = this.ensureSpace(2);
 		this.dataview.setInt16(pos, value, false);
 	}
-	writeInt16LE (value) {
+	writeInt16LE(value) {
 		const pos = this.ensureSpace(2);
 		this.dataview.setInt16(pos, value, true);
 	}
-	writeInt32BE (value) {
+	writeInt32BE(value) {
 		const pos = this.ensureSpace(4);
 		this.dataview.setInt32(pos, value, false);
 	}
-	writeInt32LE (value) {
+	writeInt32LE(value) {
 		const pos = this.ensureSpace(4);
 		this.dataview.setInt32(pos, value, true);
 	}
-	writeUInt8 (value) {
+	writeUInt8(value) {
 		const pos = this.ensureSpace(1);
 		this.dataview.setUint8(pos, value);
 	}
-	writeUInt16BE (value) {
+	writeUInt16BE(value) {
 		const pos = this.ensureSpace(2);
 		this.dataview.setUint16(pos, value, false);
 	}
-	writeUInt16LE (value) {
+	writeUInt16LE(value) {
 		const pos = this.ensureSpace(2);
 		this.dataview.setUint16(pos, value, true);
 	}
-	writeUInt32BE (value) {
+	writeUInt32BE(value) {
 		const pos = this.ensureSpace(4);
 		this.dataview.setUint32(pos, value, false);
 	}
-	writeUInt32LE (value) {
+	writeUInt32LE(value) {
 		const pos = this.ensureSpace(4);
 		this.dataview.setUint32(pos, value, true);
 	}
-	writeUInt64BE (value) {
+	writeUInt64BE(value) {
 		const pos = this.ensureSpace(8);
 		this.dataview.setUint32(pos, Number((value >> 32n) & mask32Bits), false);
 		this.dataview.setUint32(pos + 4, Number(value & mask32Bits), false);
 	}
-	writeUInt64LE (value) {
+	writeUInt64LE(value) {
 		const pos = this.ensureSpace(8);
 		this.dataview.setUint32(pos, Number(value & mask32Bits), true);
 		this.dataview.setUint32(pos + 4, Number((value >> 32n) & mask32Bits), true);
 	}
 
-	static create (stream, endonEnded) {
+	static create(stream, endonEnded) {
 		if (stream instanceof WriteStream) {
 			return stream;
 		}
@@ -189,43 +189,33 @@ export default class WriteStream {
 			return new WriteStream(stream);
 		}
 
+		const close = () => {
+			ws.closed = true;
+		};
+
 		const ws = new WriteStream((bytes, ended) => new Promise((ok, err) => {
-			let written = 0;
-			const write = () => {
-				// write 65536 at a time because a mysterious node bug corrupts
-				// data if it writes blocks that are too large
-				const writing = Math.min(bytes.length - written, 65536);
+			if (bytes.length === 0 && ended) {
+				ws.closed = true;
+				stream.removeListener('finish', close);
+				if (endonEnded) stream.end();
+			}
 
-				stream.write(bytes.subarray(written, written + writing), error => {
-					if (error) {
-						ws.closed = true;
-						err(error);
-					} else {
-						written += writing;
-						if (written >= bytes.length) {
-							if (endonEnded && ended) {
-								stream.end();
-							}
-
-							ok();
-						} else {
-							setTimeout(write, 0);
-						}
-					}
-				});
-			};
-
-			write();
+			stream.write(bytes, error => {
+				if (error) {
+					ws.closed = true;
+					err(error);
+				} else {
+					ok();
+				}
+			});
 		}));
 
-		stream.on('finish', () => {
-			ws.closed = true;
-		});
+		stream.on('finish', close);
 
 		return ws;
 	}
 
-	static createPassthrough (bufferSize) {
+	static createPassthrough(bufferSize) {
 		let buffer;
 		let latch;
 
@@ -251,7 +241,7 @@ export default class WriteStream {
 
 		return [readStream, new WriteStream((buffer_, closed) => new Promise(ok => {
 			assert(!buffer, "createPassthrough: Buffer already written");
-			buffer = {buffer: buffer_, closed};
+			buffer = { buffer: buffer_, closed };
 
 			const unlatch = latch;
 			latch = ok;
@@ -261,7 +251,7 @@ export default class WriteStream {
 		}), bufferSize)];
 	}
 
-	static createBlob (callback) {
+	static createBlob(callback) {
 		let chunks = [];
 
 		return new WriteStream(async (bytes, flushed) => {
@@ -272,7 +262,7 @@ export default class WriteStream {
 			}
 
 			if (flushed) {
-				await callback(new Blob(chunks, {type: 'application/octet-stream'}));
+				await callback(new Blob(chunks, { type: 'application/octet-stream' }));
 			}
 		});
 	}

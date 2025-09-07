@@ -24,7 +24,6 @@ import createNetwork from 'destam/Tracking.js';
 import {assert} from 'destam/util.js';
 import OObject from 'destam/Object.js';
 import UUID from 'destam/UUID.js';
-import Observer from 'destam/Observer.js';
 
 import {Delete} from 'destam/Events.js';
 
@@ -54,16 +53,6 @@ const mapAsyncIterator = (iter, map) => ({
 });
 
 const map = (table, isNew, currentTransactions, readonly, result) => {
-	const stateGovernor = obs => Observer(
-		() => obs.get(),
-		v => obs.set(v),
-		(listener, governor) => obs.register_(listener, (info, child) => {
-			const str = child.query_;
-			if (typeof str === 'string' && str[0] === '$') return false;
-			return governor(info, child);
-		})
-	);
-
 	const query = result.query;
 	let network, instance, deltaLength = 0;
 
@@ -92,12 +81,15 @@ const map = (table, isNew, currentTransactions, readonly, result) => {
 					const cacheInstance = instance && await instance;
 
 					commit = await encode(instanceFlush[0], null, {
-						observerRefs: instanceFlush[1]
+						observerRefs: instanceFlush[1],
+						observerNameFilter: name => name.charAt(0) !== '_',
 					});
 
 					if (cacheInstance && deltaLength >= MAX_DELTA_LENGTH) {
 						deltaLength = 0;
-						cache = await encode(cacheInstance);
+						cache = await encode(cacheInstance, null, {
+							observerNameFilter: name => name.charAt(0) !== '_',
+						});
 					} else {
 						deltaLength++;
 					}
@@ -118,7 +110,7 @@ const map = (table, isNew, currentTransactions, readonly, result) => {
 		return flushing;
 	};
 
-	const queryNetwork = createNetwork(stateGovernor(query.observer));
+	const queryNetwork = createNetwork(query.observer);
 	if (!readonly) queryNetwork.digest(flush.bind(null, FLUSH_TYPE_QUERY), SQUASH_TIME);
 
 	if (!query.uuid) {
@@ -147,7 +139,7 @@ const map = (table, isNew, currentTransactions, readonly, result) => {
 					instance = OObject({}, UUID(query.uuid));
 				}
 
-				network = createNetwork(stateGovernor(instance.observer));
+				network = createNetwork(instance.observer);
 				deltaLength = 0;
 
 				if (deltas) {

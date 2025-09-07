@@ -89,13 +89,16 @@ register(OObject, {
 		return !observerRefs || !observerRefs(v[observerGetter]) ? null : 'o_ref';
 	},
 	name: 'o_obj',
-	lower: v => {
+	lower: (v, {observerNameFilter}) => {
 		let reg = v[observerGetter];
 
 		const keys = [];
 		for (let link = reg.linkNext_; link !== reg; link = link.linkNext_) {
 			const name = link.query_;
-			if (name[0] !== '_' && name[0] !== '$') {
+
+			if (observerNameFilter) {
+				if (observerNameFilter(name)) keys.push(name);
+			} else if (name[0] !== '_' && name[0] !== '$') {
 				keys.push(name);
 			}
 		}
