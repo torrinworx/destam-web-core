@@ -1,15 +1,26 @@
+/*
+Since most of the logic for routing has been moved to destamatic-ui Stage system, this file's objectives are now:
+
+- Authentication, return an observer state that dictates if the user is authenticated or not. We then let users wire up what pages that means they should access, we can
+	build out a helper in stage itself that can allow users to auto route to a fallback page if a check function returns false.
+- Cookies, related to authentication above.
+- general setup of state sync with the backend via websockets.
+- basic client functions, enter, check, leave, etc.
+
+No more giant bulky frontend module system.
+*/
+
 import database from 'destam-db';
-import { mount } from 'destam-dom';
 import { v4 as uuidv4 } from 'uuid';
 import indexeddb from 'destam-db/driver/indexeddb.js';
-import { Observer, OObject, createNetwork } from 'destam';
+import { OObject, createNetwork } from 'destam';
 
 import { parse, stringify } from '../common/clone';
-import { getCookie, cookieUpdates } from './cookies';
+import { webcoreToken, setWebcoreToken, clearWebcoreToken } from './cookies';
 
 let ws;
 export const initWS = () => {
-	const token = getCookie('webcore') || '';
+	const token = webcoreToken.get() || '';
 	const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
 	const wsURL = token
 		? `${protocol}${window.location.hostname}:${window.location.port}/?token=${encodeURIComponent(token)}`
@@ -22,8 +33,11 @@ export const initWS = () => {
 	});
 };
 
+/*
+Designed as a way to request running a module on the backend from frontend ui.
+*/
 export const modReq = (name, props) => new Promise(async (resolve, reject) => {
-	const msgID = uuidv4();
+	const msgID = uuidv4(); // Use destam UUID instead for lighter weight library deps.
 
 	const handleMessage = (event) => {
 		const response = JSON.parse(event.data);
@@ -38,24 +52,25 @@ export const modReq = (name, props) => new Promise(async (resolve, reject) => {
 		}
 	};
 
-	const sendMessage = () => {
-		try {
-			ws.send(JSON.stringify({
-				name: name,
-				token: getCookie('webcore') || '',
-				id: msgID,
-				props: props ? props : null,
-			}));
-		} catch (error) {
-			reject(new Error('Issue with server module request: ', error));
-		}
-
-	};
-
 	ws.addEventListener('message', handleMessage);
-	sendMessage();
+
+	try {
+		ws.send(JSON.stringify({
+			name: name,
+			token: getCookie('webcore') || '',
+			id: msgID,
+			props: props ? props : null,
+		}));
+	} catch (error) {
+		reject(new Error('Issue with server module request: ', error));
+	}
+
+	// TODO: Cleanup event listeners?
 });
 
+/*
+Handles destam network setup and variable syncrhonization.
+*/
 export const syncNetwork = async (state) => {
 	let network;
 	const fromServer = {};
@@ -67,7 +82,7 @@ export const syncNetwork = async (state) => {
 			const serverChanges = parse(msg.result);
 			if (!state.sync) {
 				if (!Array.isArray(serverChanges)) {
-					state.sync = serverChanges; // Clone of OServer
+					state.sync = serverChanges;
 					network = createNetwork(state.sync.observer);
 
 					network.digest(async (changes, observerRefs) => {
@@ -102,13 +117,13 @@ export const syncNetwork = async (state) => {
 	});
 };
 
-export const core = async ({ App, Fallback, pages, defaultPage = 'Landing' }) => {
+/*
+Main export. Sets up server link, indexeddb, synced state with server, and cookies/authentication and other state functions.
+*/
+export const core = async () => {
 	const driver = indexeddb('webcore');
 	const DB = database(driver);
 	const client = await DB.reuse('client', { state: 'client' });
-
-	if (!App) throw new Error('App component is required.');
-	if (!Fallback) throw new Error('Fallback component is required.');
 
 	await initWS();
 
@@ -118,68 +133,21 @@ export const core = async ({ App, Fallback, pages, defaultPage = 'Landing' }) =>
 		client: client,
 		sync: null
 	});
-	window.state = state;
 
 	await syncNetwork(state);
-	cookieUpdates();
 
-	const openPage = state.client.observer.path('openPage').def({ name: defaultPage });
-
-	// Listen for when web-core cookie is changed, re-init state if webcore cookie deleted (only deleted on signout)
-	// document.addEventListener('cookiechange', async ({ detail: { newValue, oldValue } }) => {
-	// 	console.log(newValue, '\n', oldValue);
-	// 	if (oldValue.webcore && !newValue.webcore) {
-	// 		state.client.openGig = { name: defaultPage };
-	// 	}
-	// });
-	// TODO: Ensure logout even when user clears cookies
-
-	const getRoute = () => {
-		let path = window.location.pathname;
-		if (path.startsWith('/')) path = path.slice(1);
-		if (!path) path = defaultPage;
-		return path;
-	}
-
-	const route = getRoute();
-	// TODO: Issue here with fallback.name if in production without maps,
-	// the namem will get obfiscated, need to find a way around this that
-	// uses the proper name here at runtime:
-	// state.client.openPage = { name: Fallback.name };
-	if (pages[route]) state.client.openPage = { name: route };
-	else state.client.openPage = { name: Fallback.name };
-
-	/*
-	Listen to popstate so that back/forward browser actions
-	update openPage accordingly. This also handles the user
-	manually editing the URL in the address bar.
-	*/
-	window.addEventListener('popstate', () => {
-		// If the user typed a URL or used back/forward, parse the current path
-		const path = getRoute();
-		if (!pages[path]) {
-			state.client.openPage = { name: Fallback.name };
-		} else {
-			state.client.openPage = { name: path };
-		}
-	});
-
-	const token = getCookie('webcore') || '';
+	const token = webcoreToken.get() || '';
 	if (token) (async () => await modReq('sync'))();
 
 	state.enter = async (email, password) => {
-		const response = await modReq(
-			'enter',
-			{
-				email: email.get(),
-				password: password.get(),
-			}
-		);
+		const response = await modReq('enter', {
+			email: email.get(),
+			password: password.get(),
+		});
 
 		if (response.token) {
-			const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-			document.cookie = `webcore=${response.token}; expires=${expires}; path=/; SameSite=Lax`;
-			await modReq('sync')
+			setWebcoreToken(response.token);
+			await modReq('sync');
 		}
 		return response;
 	};
@@ -190,48 +158,9 @@ export const core = async ({ App, Fallback, pages, defaultPage = 'Landing' }) =>
 	);
 
 	state.leave = () => {
-		document.cookie = 'webcore=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax';
-		const cookies = document.cookie.split("; ");
-		for (const cookie of cookies) {
-			const eqPos = cookie.indexOf("=");
-			const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-			document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-		}
-		state.client.openPage = { name: defaultPage };
+		clearWebcoreToken();
 		state.sync = null;
 	};
 
-	const Router = (_, cleanup) => {
-		const auth = state.observer.path('sync');
-
-		cleanup(openPage.effect(page => {
-			const newPath = `/${page.name}`;
-			if (newPath !== window.location.pathname) {
-				// Push a new entry onto the history stack with the route name
-				history.pushState({ name: page.name }, '', newPath);
-			}
-		}));
-
-		return Observer.all([openPage, auth]).map(([p, a]) => {
-			const pageCmp = pages[p.name];
-			if (!pageCmp) return <Fallback state={state} />;
-			const page = pageCmp.default;
-			const Page = page.page;
-
-			if (Page) return !page.authenticated
-				? <Page state={state} />
-				: (a && page.authenticated
-					? <Page state={state} />
-					: <Fallback state={state} />
-				)
-			else return <Fallback state={state} />;
-		}).unwrap();
-	};
-
-	mount(document.body,
-		pages ? <App state={state}><Router /></App>
-			: window.location.pathname === '/'
-				? <App state={state} />
-				: <Fallback state={state} />
-	);
+	return state;
 };
