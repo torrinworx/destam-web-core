@@ -57,12 +57,13 @@ export const modReq = (name, props) => new Promise(async (resolve, reject) => {
 	try {
 		ws.send(JSON.stringify({
 			name: name,
-			token: getCookie('webcore') || '',
+			token: webcoreToken.get() || '',
 			id: msgID,
 			props: props ? props : null,
 		}));
 	} catch (error) {
 		reject(new Error('Issue with server module request: ', error));
+		console.log(error)
 	}
 
 	// TODO: Cleanup event listeners?
@@ -79,9 +80,12 @@ export const syncNetwork = async (state) => {
 		msg = parse(msg.data);
 		// look for sync here because other data is returned from the server for modReq:
 		if (msg.name === 'sync') {
+			console.log("MSG SYNC: ", msg);
 			const serverChanges = parse(msg.result);
 			if (!state.sync) {
+				console.log("STATE DOES NOT HAVE SYNC")
 				if (!Array.isArray(serverChanges)) {
+					console.log("SERVER CHANGES IS NOT AN ARRAY.");
 					state.sync = serverChanges;
 					network = createNetwork(state.sync.observer);
 
@@ -102,6 +106,7 @@ export const syncNetwork = async (state) => {
 				}
 			} else {
 				if (Array.isArray(serverChanges)) {
+					console.log("SERVER CHANGES IS AN ARRAY.");
 					network.apply(serverChanges, fromServer);
 				}
 			}
@@ -120,34 +125,32 @@ export const syncNetwork = async (state) => {
 /*
 Main export. Sets up server link, indexeddb, synced state with server, and cookies/authentication and other state functions.
 */
-export const core = async () => {
+
+export const clientState = async () => {
 	const driver = indexeddb('webcore');
 	const DB = database(driver);
-	const client = await DB.reuse('client', { state: 'client' });
+	return await DB.reuse('client', { state: 'client' });
+};
 
+export const syncState = async () => {
 	await initWS();
 
-	// State is split in two: state.sync and state.client, this prevents
-	// client only updates from needlessly updating the database.
 	const state = OObject({
-		client: client,
 		sync: null
 	});
 
 	await syncNetwork(state);
 
 	const token = webcoreToken.get() || '';
-	if (token) (async () => await modReq('sync'))();
+	if (token) await modReq('sync');
 
 	state.enter = async (email, password) => {
 		const response = await modReq('enter', {
 			email: email.get(),
 			password: password.get(),
 		});
-
 		if (response.token) {
 			setWebcoreToken(response.token);
-			await modReq('sync');
 		}
 		return response;
 	};
@@ -161,6 +164,8 @@ export const core = async () => {
 		clearWebcoreToken();
 		state.sync = null;
 	};
+
+	state.modReq = modReq;
 
 	return state;
 };
