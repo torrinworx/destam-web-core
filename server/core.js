@@ -7,8 +7,6 @@ import Modules from './modules.js';
 import http from './servers/http.js';
 import { parse, stringify } from '../common/clone.js';
 
-const validators = new Map()
-
 /**
  * Sets up a synced observer with the client and db. Synchronizes changes from
  * the client/server and updates through WebSocket connection.
@@ -20,6 +18,7 @@ const validators = new Map()
 const syncNetwork = (authenticated, ws, sync = OObject({})) => {
 	let network = createNetwork(sync.observer);
 	const fromClient = {};
+	// Don't know why this one is here:
 	ws.send(JSON.stringify({ name: 'sync', result: stringify(sync) }));
 
 	network.digest(async (changes, observerRefs) => {
@@ -33,7 +32,7 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
 		msg = parse(msg);
 
 		if (authenticated.get() && msg.name === 'sync') {
-			ws.send(JSON.stringify({ name: 'sync', result: stringify(sync) }));
+			ws.send(JSON.stringify({ name: 'sync', result: stringify(sync), id: msg.id  }));
 
 			if (msg.clientChanges) {
 				// TODO: validate changes follow the validator/schema

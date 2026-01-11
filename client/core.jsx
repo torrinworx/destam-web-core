@@ -80,12 +80,9 @@ export const syncNetwork = async (state) => {
 		msg = parse(msg.data);
 		// look for sync here because other data is returned from the server for modReq:
 		if (msg.name === 'sync') {
-			console.log("MSG SYNC: ", msg);
 			const serverChanges = parse(msg.result);
 			if (!state.sync) {
-				console.log("STATE DOES NOT HAVE SYNC")
 				if (!Array.isArray(serverChanges)) {
-					console.log("SERVER CHANGES IS NOT AN ARRAY.");
 					state.sync = serverChanges;
 					network = createNetwork(state.sync.observer);
 
@@ -106,7 +103,6 @@ export const syncNetwork = async (state) => {
 				}
 			} else {
 				if (Array.isArray(serverChanges)) {
-					console.log("SERVER CHANGES IS AN ARRAY.");
 					network.apply(serverChanges, fromServer);
 				}
 			}
