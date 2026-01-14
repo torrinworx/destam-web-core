@@ -79,7 +79,7 @@ export const syncNetwork = async (state) => {
 	ws.addEventListener('message', msg => {
 		msg = parse(msg.data);
 		// look for sync here because other data is returned from the server for modReq:
-		if (msg.name === 'sync') {
+		if (msg.name === 'sync' && msg?.error === undefined) {
 			const serverChanges = parse(msg.result);
 			if (!state.sync) {
 				if (!Array.isArray(serverChanges)) {
@@ -138,7 +138,11 @@ export const syncState = async () => {
 	await syncNetwork(state);
 
 	const token = webcoreToken.get() || '';
-	if (token) await modReq('sync');
+
+	if (token) {
+		const sync_res = await modReq('sync');
+		if (sync_res?.error === 'Invalid session token.') clearWebcoreToken();
+	};
 
 	state.enter = async (email, password) => {
 		const response = await modReq('enter', {

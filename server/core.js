@@ -30,9 +30,8 @@ const syncNetwork = (authenticated, ws, sync = OObject({})) => {
 
 	ws.on('message', async (msg) => {
 		msg = parse(msg);
-
 		if (authenticated.get() && msg.name === 'sync') {
-			ws.send(JSON.stringify({ name: 'sync', result: stringify(sync), id: msg.id  }));
+			ws.send(JSON.stringify({ name: 'sync', result: stringify(sync), id: msg.id }));
 
 			if (msg.clientChanges) {
 				// TODO: validate changes follow the validator/schema
@@ -89,10 +88,10 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		let user;
 		let onConProps;
 		const token = Observer.mutable(new URLSearchParams(req.url.split('?')[1]).get('token'));
-		const authenticated = Observer.mutable(false);
+		const authenticated = Observer.mutable(null);
 
 		authenticated.effect(a => {
-			if (a) (async () => {
+			if (a === true) (async () => {
 				try {
 					let session = await DB.query('sessions', { uuid: token.get() });
 					if (!session) throw new Error('Session not found.');
@@ -114,6 +113,9 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 					if (sync) ws.close();
 				}
 			})();
+			if (a === false) {
+				console.log('not a valid session');
+			}
 			else if (sync) ws.close();
 		});
 
@@ -150,7 +152,11 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 					authenticated.set(status);
 				}
 
-				if (msg.name === 'sync') return;
+				if (msg.name === 'sync' && !sync) {
+					ws.send(JSON.stringify({ name: 'sync', result: { error: 'Invalid session token.' }, id: msg.id }));
+					return;
+				}
+				if (sync && msg.name === 'sync') return;
 
 				const module = modules[msg.name];
 				// Check if the module exists and has an onMsg function.
