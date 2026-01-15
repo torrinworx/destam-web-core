@@ -144,9 +144,10 @@ export const syncState = async () => {
 		if (sync_res?.error === 'Invalid session token.') clearWebcoreToken();
 	};
 
-	state.enter = async (email, password) => {
+	state.enter = async ({ email, name, password }) => {
 		const response = await modReq('enter', {
 			email: email.get(),
+			name: name?.get(),
 			password: password.get(),
 		});
 		if (response.token) {
