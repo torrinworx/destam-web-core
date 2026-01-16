@@ -152,10 +152,11 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 					authenticated.set(status);
 				}
 
-				if (msg.name === 'sync' && !sync) {
-					ws.send(JSON.stringify({ name: 'sync', result: { error: 'Invalid session token.' }, id: msg.id }));
-					return;
-				}
+				// if (msg.name === 'sync' && !sync) {
+				// 	ws.send(JSON.stringify({ name: 'sync', result: { error: 'Invalid session token.' }, id: msg.id }));
+				// 	return;
+				// }
+
 				if (sync && msg.name === 'sync') return;
 
 				const module = modules[msg.name];
