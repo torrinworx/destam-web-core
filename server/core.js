@@ -114,7 +114,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 				}
 			})();
 			if (a === false) {
-				console.log('not a valid session');
+				// console.log('not a valid session');
 			}
 			else if (sync) ws.close();
 		});
