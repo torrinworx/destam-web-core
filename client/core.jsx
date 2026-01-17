@@ -1,77 +1,170 @@
-/*
-Since most of the logic for routing has been moved to destamatic-ui Stage system, this file's objectives are now:
-
-- Authentication, return an observer state that dictates if the user is authenticated or not. We then let users wire up what pages that means they should access, we can
-	build out a helper in stage itself that can allow users to auto route to a fallback page if a check function returns false.
-- Cookies, related to authentication above.
-- general setup of state sync with the backend via websockets.
-- basic client functions, enter, check, leave, etc.
-
-No more giant bulky frontend module system.
-*/
-
 import database from 'destam-db';
-import { v4 as uuidv4 } from 'uuid';
 import indexeddb from 'destam-db/driver/indexeddb.js';
-import { OObject } from 'destam';
+import { OObject, UUID, Observer } from 'destam';
 
-import { default as syncNet } from './sync.js'
-import { webcoreToken, setWebcoreToken, clearWebcoreToken } from './cookies';
+import { default as syncNet } from './sync.js';
+import { webcoreToken, setWebcoreToken, clearWebcoreToken } from './cookies.js';
 
-let ws;
-export const initWS = () => {
-	const token = webcoreToken.get() || '';
-	const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-	const wsURL = token
-		? `${protocol}${window.location.hostname}:${window.location.port}/?token=${encodeURIComponent(token)}`
-		: `${protocol}${window.location.hostname}:${window.location.port}`;
-	ws = new WebSocket(wsURL);
-	return new Promise((resolve, reject) => {
-		ws.addEventListener('open', () => resolve(ws));
-		ws.addEventListener('error', (err) => reject(err));
-		ws.addEventListener('close', () => { });
-	});
+let ws = null;
+let connectPromise = null;
+
+const pending = new Map(); // id -> { resolve, reject, timeout }
+
+export const wsConnected = Observer.mutable(false);
+export const wsAuthed = Observer.mutable(false);
+export const wsAuthKnown = Observer.mutable(false); // "have we received an auth packet yet?"
+
+let syncStarted = false;
+let stopSync = null;
+
+const send = (obj) => {
+	if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error('WebSocket not connected.');
+	ws.send(JSON.stringify(obj));
 };
 
-/*
-Designed as a way to request running a module on the backend from frontend ui.
-*/
-export const modReq = (name, props) => new Promise(async (resolve, reject) => {
-	const msgID = uuidv4(); // Use destam UUID instead for lighter weight library deps.
+const wsURL = () => {
+	const token = webcoreToken.get() || '';
+	const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+	const host = window.location.host; // includes port
+	return token
+		? `${protocol}${host}/?token=${encodeURIComponent(token)}`
+		: `${protocol}${host}/`;
+};
 
-	const handleMessage = (event) => {
-		const response = JSON.parse(event.data);
-		if (response.id === msgID) {
-			ws.removeEventListener('message', handleMessage);
+const cleanupSocket = (reason = 'socket closed') => {
+	wsConnected.set(false);
+	wsAuthed.set(false);
+	wsAuthKnown.set(false);
 
-			if (response.error) {
-				console.error(response.error);
-			} else {
-				resolve(response.result);
-			}
-		}
-	};
+	// stop sync wiring if any
+	try { stopSync?.(); } catch { }
+	stopSync = null;
+	syncStarted = false;
 
-	ws.addEventListener('message', handleMessage);
-
-	try {
-		ws.send(JSON.stringify({
-			name: name,
-			token: webcoreToken.get() || '',
-			id: msgID,
-			props: props ? props : null,
-		}));
-	} catch (error) {
-		reject(new Error('Issue with server module request: ', error));
-		console.log(error)
+	// reject all pending requests
+	for (const [id, p] of pending) {
+		clearTimeout(p.timeout);
+		p.reject(new Error(reason));
+		pending.delete(id);
 	}
 
-	// TODO: Cleanup event listeners?
-});
+	ws = null;
+};
 
-/*
-Main export. Sets up server link, indexeddb, synced state with server, and cookies/authentication and other state functions.
-*/
+const startSyncOnce = (state) => {
+	if (syncStarted) return;
+
+	const socket = ws;
+	if (!socket || socket.readyState !== WebSocket.OPEN) return;
+
+	syncStarted = true;
+
+	Promise.resolve()
+		.then(() => syncNet(state, socket))
+		.then(ret => {
+			if (typeof ret === 'function') stopSync = ret;
+		})
+		.catch(err => {
+			console.error('syncNet error:', err);
+			try { socket.close(); } catch { }
+		});
+};
+
+export const initWS = async () => {
+	if (ws && ws.readyState === WebSocket.OPEN) return ws;
+	if (connectPromise) return connectPromise;
+
+	connectPromise = new Promise((resolve, reject) => {
+		const socket = new WebSocket(wsURL());
+		ws = socket;
+
+		const isCurrent = () => ws === socket;
+
+		const onOpen = () => {
+			if (!isCurrent()) return;
+			wsConnected.set(true);
+			resolve(socket);
+		};
+
+		const onError = (err) => {
+			if (!isCurrent()) return;
+			reject(err);
+		};
+
+		const onClose = () => {
+			if (!isCurrent()) return;
+			cleanupSocket('socket closed');
+		};
+
+		const onMessage = (event) => {
+			if (!isCurrent()) return;
+
+			let msg;
+			try { msg = JSON.parse(event.data); } catch { return; }
+
+			if (msg?.name === 'auth') {
+				wsAuthKnown.set(true);
+				wsAuthed.set(!!msg.ok);
+
+				if (!msg.ok && webcoreToken.get()) clearWebcoreToken();
+				return;
+			}
+
+			if (msg?.id && pending.has(msg.id)) {
+				const p = pending.get(msg.id);
+				pending.delete(msg.id);
+				clearTimeout(p.timeout);
+
+				if (msg.error) p.reject(new Error(msg.error));
+				else p.resolve(msg.result);
+			}
+		};
+
+		socket.addEventListener('open', onOpen, { once: true });
+		socket.addEventListener('error', onError, { once: true });
+		socket.addEventListener('close', onClose);
+		socket.addEventListener('message', onMessage);
+	}).finally(() => {
+		connectPromise = null;
+	});
+
+	return connectPromise;
+};
+
+export const closeWS = () => {
+	try { ws?.close(); } catch { }
+};
+
+export const modReq = (name, props, { timeout = 15000 } = {}) => {
+	if (name === 'sync') {
+		return Promise.reject(new Error(`modReq('sync') is not supported; 'sync' is reserved.`));
+	}
+
+	return new Promise(async (resolve, reject) => {
+		try {
+			await initWS();
+			if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error('WebSocket not connected.');
+
+			const id = UUID().toHex();
+
+			const t = setTimeout(() => {
+				pending.delete(id);
+				reject(new Error(`Request timed out: ${name}`));
+			}, timeout);
+
+			pending.set(id, { resolve, reject, timeout: t });
+
+			send({
+				name,
+				id,
+				props: props || null,
+				token: webcoreToken.get() || '',
+			});
+		} catch (err) {
+			reject(err);
+		}
+	});
+};
 
 export const clientState = async () => {
 	const driver = indexeddb('webcore');
@@ -79,45 +172,81 @@ export const clientState = async () => {
 	return await DB.reuse('client', { state: 'client' });
 };
 
-export const syncState = async () => {
+export const reconnectWS = async () => {
+	const socket = ws;
+	try { socket?.close(); } catch { }
+
+	// reset immediately (don't wait for close event)
+	cleanupSocket('reconnect');
+
 	await initWS();
+};
 
-	const state = OObject({
-		sync: null
-	});
+let singletonState = null;
+let singletonStatePromise = null;
 
-	await syncNet(state);
+export const syncState = async () => {
+	if (singletonState) return singletonState;
+	if (singletonStatePromise) return singletonStatePromise;
 
-	const token = webcoreToken.get() || '';
+	singletonStatePromise = (async () => {
+		await initWS();
 
-	if (token) {
-		const sync_res = await modReq('sync');
-		if (sync_res?.error === 'Invalid session token.') clearWebcoreToken();
-	};
+		const state = OObject({
+			sync: null,
 
-	state.enter = async ({ email, name, password }) => {
-		const response = await modReq('enter', {
-			email: email.get(),
-			name: name?.get(),
-			password: password.get(),
+			connected: wsConnected,
+			authed: wsAuthed,
+			authKnown: wsAuthKnown,
 		});
-		if (response.token) {
-			setWebcoreToken(response.token);
-		}
-		return response;
-	};
 
-	state.check = async (email) => await modReq(
-		'check',
-		{ email: email.get() }
-	);
+		// if we ever become authed, start syncNet once
+		wsAuthed.watch(e => {
+			if (e.value) {
+				startSyncOnce(state);
+			} else {
+				// auth lost -> stop network wiring
+				try { stopSync?.(); } catch { }
+				stopSync = null;
+				syncStarted = false;
 
-	state.leave = () => {
-		clearWebcoreToken();
-		state.sync = null;
-	};
+				state.sync = null;
+			}
+		});
 
-	state.modReq = modReq;
+		// If server already told us we're authed before watchers attached, start now
+		if (wsAuthed.get()) startSyncOnce(state);
 
-	return state;
+		state.enter = async ({ email, name, password, ...props }) => {
+			const response = await modReq('enter', {
+				email: email.get(),
+				name: name?.get(),
+				password: password.get(),
+				...props,
+			});
+
+			if (response?.token) {
+				setWebcoreToken(response.token);
+				await reconnectWS();
+			}
+
+			return response;
+		};
+
+		state.leave = async () => {
+			clearWebcoreToken();
+			state.sync = null;
+			await reconnectWS();
+		};
+
+		state.check = async (email) =>
+			await modReq('check', { email: email.get() });
+
+		state.modReq = modReq;
+
+		singletonState = state;
+		return state;
+	})();
+
+	return singletonStatePromise;
 };

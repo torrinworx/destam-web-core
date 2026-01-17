@@ -1,59 +1,110 @@
-
-import database from 'destam-db';
-import { v4 as uuidv4 } from 'uuid';
-import indexeddb from 'destam-db/driver/indexeddb.js';
-import { OObject, createNetwork } from 'destam';
-
-import { parse, stringify } from '../common/clone';
-import { webcoreToken, setWebcoreToken, clearWebcoreToken } from './cookies';
+import { createNetwork } from 'destam';
+import { parse, stringify } from '../common/clone.js';
 
 /*
-Handles destam network setup and variable syncrhonization.
+Handles destam network setup and variable synchronization.
+Returns a cleanup function.
 */
-export const sync = async (state) => {
-	let network;
+const sync = (state, ws) => {
+	if (!ws) throw new Error('sync: ws is null/undefined');
+
+	let network = null;
 	const fromServer = {};
+	let alive = true;
 
-	ws.addEventListener('message', msg => {
-		msg = parse(msg.data);
-		// look for sync here because other data is returned from the server for modReq:
-		if (msg.name === 'sync' && msg?.error === undefined) {
-			const serverChanges = parse(msg.result);
-			if (!state.sync) {
-				if (!Array.isArray(serverChanges)) {
-					state.sync = serverChanges;
-					network = createNetwork(state.sync.observer);
+	const send = (obj) => {
+		if (!alive) return;
+		if (ws.readyState !== WebSocket.OPEN) return;
+		ws.send(JSON.stringify(obj));
+	};
 
-					network.digest(async (changes, observerRefs) => {
-						const clientChanges = stringify(
-							changes,
-							{ observerRefs: observerRefs, observerNetwork: network }
-						);
-						await modReq('sync', { clientChanges: clientChanges })
-					}, 1000 / 30, arg => arg === fromServer);
+	const stop = () => {
+		if (!alive) return;
+		alive = false;
 
-					window.addEventListener('unload', () => {
-						if (ws) ws.close();
-						if (network) network.remove();
-					});
-				} else {
-					console.error('First message should establish sync, received an array instead.');
-				}
-			} else {
-				if (Array.isArray(serverChanges)) {
-					network.apply(serverChanges, fromServer);
-				}
-			}
+		try { ws.removeEventListener('message', onMessage); } catch { }
+		try { ws.removeEventListener('close', onClose); } catch { }
+		try { ws.removeEventListener('error', onError); } catch { }
+
+		try { network?.remove(); } catch { }
+		network = null;
+
+		// keep this consistent: no sync network => no state.sync
+		state.sync = null;
+	};
+
+	const onError = (e) => {
+		console.error('WebSocket error:', e?.message || e);
+	};
+
+	const onClose = () => {
+		stop();
+	};
+
+	const onMessage = (evt) => {
+		let msg;
+		try {
+			msg = parse(evt.data);
+		} catch {
+			return;
 		}
-	});
 
-	ws.addEventListener('close', () => {
-		if (network) network.remove();
-	});
+		if (msg?.name !== 'sync') return;
 
-	ws.addEventListener('error', (error) => {
-		console.error('WebSocket error:', error.message);
-	});
+		// support both error shapes
+		if (msg.error || msg?.result?.error) return;
+
+		let serverPayload;
+		try {
+			serverPayload = parse(msg.result);
+		} catch (e) {
+			console.error('sync: failed to parse msg.result', e);
+			return;
+		}
+
+		// first sync packet should be the full store (not an array of deltas)
+		if (!state.sync) {
+			if (Array.isArray(serverPayload)) {
+				console.error('sync: first sync message must be a store object, got delta array.');
+				return;
+			}
+
+			state.sync = serverPayload;
+			network = createNetwork(state.sync.observer);
+
+			network.digest(
+				(changes, observerRefs) => {
+					if (!network) return;
+
+					const clientChanges = stringify(changes, {
+						observerRefs,
+						observerNetwork: network,
+					});
+					send({
+						name: 'sync',
+						clientChanges,
+					});
+				},
+				1000 / 30,
+				(arg) => arg === fromServer
+			);
+
+			return;
+		}
+
+		// subsequent packets should be arrays of deltas
+		if (network && Array.isArray(serverPayload)) {
+			network.apply(serverPayload, fromServer);
+		}
+	};
+
+	ws.addEventListener('message', onMessage);
+	ws.addEventListener('close', onClose);
+	ws.addEventListener('error', onError);
+
+	queueMicrotask(() => send({ name: 'sync' }));
+
+	return stop;
 };
 
 export default sync;
