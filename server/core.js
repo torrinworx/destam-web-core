@@ -138,8 +138,6 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			// tell client it’s safe to begin sync (client should wait for this)
 			send({ name: 'auth', ok: true, token });
 
-			console.log(sync);
-
 			if (onCon) {
 				Promise.resolve(onCon(ws, req, user, sync, token))
 					.then(v => (onConProps = v))
