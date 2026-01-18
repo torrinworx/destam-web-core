@@ -6,10 +6,10 @@ import { default as syncNet } from './sync.js';
 import Modules from './modules.js';
 import http from './servers/http.js';
 import { parse } from '../common/clone.js';
+import createValidation from './validate.js';
 
 const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table, env, port }) => {
-	const mongo = mongodb(db, table);
-	const DB = database(mongo);
+
 	server = server ? server() : http();
 
 	if (env === 'production') server.production({ root });
@@ -19,8 +19,40 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		server.development({ vite, root }); // pass root if needed
 	}
 
+	const mongo = mongodb(db, table);
+	const rawDB = database(mongo);
+	const { DB, registerValidator } = createValidation(rawDB);
+
 	// load modules before listen
 	const modules = await Modules(modulesDir, { serverProps: server.props, DB });
+
+	for (const [name, mod] of Object.entries(modules)) {
+		const v = mod?.validate;
+		if (!v) continue;
+
+		if (typeof v !== 'object') throw new Error(`Module "${name}" validate must be an object`);
+		if (typeof v.table !== 'string' || !v.table) throw new Error(`Module "${name}" validate.table must be a string`);
+		if (typeof v.register !== 'function') throw new Error(`Module "${name}" validate.register must be a function`);
+
+		let produced;
+
+		// register() => factory (boot-time)
+		// register(doc) => direct validator (runtime)
+		if (v.register.length === 0) {
+			produced = await v.register();
+		} else {
+			produced = v.register;
+		}
+
+		const list = Array.isArray(produced) ? produced : [produced];
+
+		for (const fn of list) {
+			if (typeof fn !== 'function') {
+				throw new Error(`Module "${name}" validate.register must produce a validator function (or array of them)`);
+			}
+			registerValidator(v.table, fn);
+		}
+	}
 
 	// now start server, get node http.Server back
 	const nodeServer = await server.listen(port);
@@ -54,7 +86,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			const sessionQuery = await DB.query('sessions', { uuid: token });
 			if (!sessionQuery) return null;
 
-			const session = await DB.instance(sessionQuery);
+			const session = await DB.instance(sessionQuery, 'sessions');
 
 			// make expires a number (supports old data too)
 			const expires =
@@ -66,7 +98,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			const userQuery = await DB.query('users', { uuid: session.query.user });
 			if (!userQuery) return null;
 
-			const user = await DB.instance(userQuery);
+			const user = await DB.instance(userQuery, 'users');
 
 			const sync = await DB.reuse('state', { user: user.query.uuid });
 

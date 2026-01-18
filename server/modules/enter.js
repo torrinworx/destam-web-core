@@ -40,7 +40,7 @@ export default () => {
 
 				const userQuery = await DB.query('users', { email });
 
-				// Login 
+				// Login
 				if (userQuery) {
 					const user = await DB.instance(userQuery);
 
