@@ -210,10 +210,26 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			}
 		});
 
+		ws.isAlive = true;
+		ws.on("pong", () => { ws.isAlive = true; });
+
 		ws.on('close', () => {
 			try { stopSync?.(); } catch { }
 		});
 	});
+
+	const interval = setInterval(() => {
+		for (const ws of wss.clients) {
+			if (ws.isAlive === false) {
+				try { ws.terminate(); } catch { }
+				continue;
+			}
+			ws.isAlive = false;
+			try { ws.ping(); } catch { }
+		}
+	}, 30000);
+
+	wss.on("close", () => clearInterval(interval));
 };
 
 export default core;

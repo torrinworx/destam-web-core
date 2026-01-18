@@ -70,6 +70,35 @@ const startSyncOnce = (state) => {
 		});
 };
 
+let reconnectTimer = null;
+let reconnectDelay = 500; // start at 0.5s
+const reconnectDelayMax = 10000; // cap at 10s
+
+const shouldReconnect = () =>
+	document.visibilityState === "visible" && navigator.onLine;
+
+const scheduleReconnect = () => {
+	if (reconnectTimer) return;       // already scheduled
+	if (!shouldReconnect()) return;   // wait for visibility/online events
+
+	reconnectTimer = setTimeout(() => {
+		reconnectTimer = null;
+
+		initWS()
+			.then(() => {
+				reconnectDelay = 500; // reset backoff on success
+			})
+			.catch(() => {
+				reconnectDelay = Math.min(reconnectDelay * 2, reconnectDelayMax);
+				scheduleReconnect();
+			});
+	}, reconnectDelay);
+};
+
+// set these ONCE (module init time, not inside onClose)
+window.addEventListener("online", scheduleReconnect);
+document.addEventListener("visibilitychange", scheduleReconnect);
+
 export const initWS = async () => {
 	if (ws && ws.readyState === WebSocket.OPEN) return ws;
 	if (connectPromise) return connectPromise;
@@ -93,7 +122,8 @@ export const initWS = async () => {
 
 		const onClose = () => {
 			if (!isCurrent()) return;
-			cleanupSocket('socket closed');
+			cleanupSocket("socket closed");
+			scheduleReconnect();
 		};
 
 		const onMessage = (event) => {
