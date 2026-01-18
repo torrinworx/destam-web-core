@@ -1,45 +1,74 @@
-import fs from 'fs';
-import express from 'express';
+import fs from "fs";
+import path from "path";
+import express from "express";
 
-// express server driver:
 export default () => {
 	const app = express();
+	let root = null;
+	let vite = null;
 
-	return {
-		production: ({ root }) => {
-			app.use(express.static(root));
+	// stuff modules can add before SPA fallback
+	const pre = [];
 
-			app.get('*', (req, res) => {
-				res.sendFile('index.html', { root }, err => {
-					if (err) {
-						res.status(500).send(err);
-						console.error('Error serving index.html:', err);
-					}
-				});
-			});
-		},
-		development: ({ vite }) => {
-			app.use(vite.middlewares);
+	const use = (...args) => pre.push({ type: "use", args });
+	const get = (...args) => pre.push({ type: "get", args });
+	const post = (...args) => pre.push({ type: "post", args });
 
-			app.get('*', async (req, res, next) => {
-				try {
+	const applyPre = () => {
+		for (const item of pre) app[item.type](...item.args);
+	};
+
+	const mountSpaFallback = () => {
+		// IMPORTANT: don't catch /api (or ws paths) in SPA fallback
+		app.get(/^\/(?!api\/).*/, async (req, res, next) => {
+			try {
+				if (vite) {
 					const html = await vite.transformIndexHtml(
 						req.originalUrl,
-						fs.readFileSync(
-							path.resolve(root, 'index.html'),
-							'utf-8'
-						)
+						fs.readFileSync(path.resolve(root, "index.html"), "utf-8")
 					);
-
-					res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
-				} catch (e) {
-					vite.ssrFixStacktrace(e);
-					next(e);
+					res.status(200).set({ "Content-Type": "text/html" }).end(html);
+				} else {
+					res.sendFile("index.html", { root });
 				}
+			} catch (e) {
+				vite?.ssrFixStacktrace?.(e);
+				next(e);
+			}
+		});
+	};
+
+	return {
+		// expose these so modules can register endpoints
+		props: { app },
+		use,
+		get,
+		post,
+
+		production: ({ root: rootPath }) => {
+			root = rootPath;
+			vite = null;
+			// NOTE: do NOT mount fallback yet
+		},
+
+		development: ({ vite: viteInstance, root: rootPath }) => {
+			root = rootPath;
+			vite = viteInstance;
+			// NOTE: do NOT mount fallback yet
+		},
+
+		listen: (port) => {
+			// order: module routes first, then Vite/static, then fallback
+			applyPre();
+
+			if (vite) app.use(vite.middlewares);
+			else app.use(express.static(root));
+
+			mountSpaFallback();
+
+			return app.listen(port || 3000, () => {
+				console.log(`Serving on http://localhost:${port || 3000}/ (express)`);
 			});
 		},
-		listen: (port) => app.listen(port || 3000, () => {
-			console.log(`destam-web-core running on http://localhost:${port || 3000}/ using express.js server.`);
-		})
-	}
+	};
 };

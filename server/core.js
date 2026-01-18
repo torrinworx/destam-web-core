@@ -10,18 +10,23 @@ import { parse } from '../common/clone.js';
 const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table, env, port }) => {
 	const mongo = mongodb(db, table);
 	const DB = database(mongo);
-	const modules = await Modules(modulesDir);
-	server = server ? server = server() : http();
+	server = server ? server() : http();
 
 	if (env === 'production') server.production({ root });
 	else {
 		const { createServer: createViteServer } = await import('vite');
 		const vite = await createViteServer({ server: { middlewareMode: 'html' } });
-		server.development({ vite });
+		server.development({ vite, root }); // pass root if needed
 	}
 
-	server = await server.listen(port);
-	const wss = new WebSocketServer({ server });
+	// load modules before listen
+	const modules = await Modules(modulesDir, { serverProps: server.props, DB });
+
+	// now start server, get node http.Server back
+	const nodeServer = await server.listen(port);
+
+	// websocket uses the node server
+	const wss = new WebSocketServer({ server: nodeServer });
 
 	wss.on('connection', async (ws, req) => {
 		const send = obj => {
@@ -186,6 +191,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 					msg.props,
 					onConProps || null,
 					{
+						server,
 						sync,
 						user,
 						onEnter: msg.name === 'enter' ? onEnter : null,

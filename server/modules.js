@@ -163,7 +163,9 @@ const instantiateModules = async (modulesMap, sortedNames, props) => {
 		}
 
 		// Build the injection object
-		const injection = {};
+		const injection = {
+			...props
+		};
 
 		for (const depName of deps) {
 			const depInstance = instantiated[depName];
@@ -184,7 +186,6 @@ const instantiateModules = async (modulesMap, sortedNames, props) => {
 			};
 		}
 
-		injection.props = props;
 		const instance = await factory(injection);
 
 		if (instance && typeof instance !== "object") {
