@@ -196,10 +196,14 @@ export const modReq = (name, props, { timeout = 15000 } = {}) => {
 	});
 };
 
+
+const driver = indexeddb('webcore');
+export const DB = database(driver);
+
+let clientPromise;
 export const clientState = async () => {
-	const driver = indexeddb('webcore');
-	const DB = database(driver);
-	return await DB.reuse('client', { state: 'client' });
+  if (!clientPromise) clientPromise = DB.reuse('client', { state: 'client' });
+  return await clientPromise;
 };
 
 export const reconnectWS = async () => {
