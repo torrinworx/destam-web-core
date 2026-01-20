@@ -19,7 +19,6 @@
     "dependencies": {
         "bcryptjs": "^2.4.3",
         "destam": "^0.8.0",
-        "destam-dom": "^0.14.0",
         "destam-db": "file:db",
         "uuid": "^11.0.3",
         "ws": "^8.18.0"
