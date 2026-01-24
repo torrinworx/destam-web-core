@@ -18,17 +18,19 @@
     "license": "GPL-3.0",
     "dependencies": {
         "bcryptjs": "^2.4.3",
+        "cron-parser": "^5.5.0",
         "destam": "^0.8.0",
         "destam-db": "file:db",
+        "luxon": "^3.7.2",
         "uuid": "^11.0.3",
         "ws": "^8.18.0"
     },
     "devDependencies": {
-        "vite": "^5.4.10",
         "@babel/core": "^7.25.2",
         "@babel/generator": "^7.25.6",
         "@babel/parser": "^7.25.6",
         "@babel/plugin-syntax-jsx": "^7.24.7",
-        "nodemon": "^3.1.7"
+        "nodemon": "^3.1.7",
+        "vite": "^5.4.10"
     }
 }

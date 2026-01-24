@@ -7,25 +7,45 @@ import Modules from './modules.js';
 import http from './servers/http.js';
 import { parse } from '../common/clone.js';
 import createValidation from './validate.js';
+import createSchedule from './schedule.js';
 
 const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table, env, port }) => {
-
 	server = server ? server() : http();
 
 	if (env === 'production') server.production({ root });
 	else {
 		const { createServer: createViteServer } = await import('vite');
 		const vite = await createViteServer({ server: { middlewareMode: 'html' } });
-		server.development({ vite, root }); // pass root if needed
+		server.development({ vite, root });
 	}
 
 	const mongo = mongodb(db, table);
+	const mongoDb = await mongo.database;
+
 	const rawDB = database(mongo);
 	const { DB, registerValidator } = createValidation(rawDB);
 
-	// load modules before listen
-	const modules = await Modules(modulesDir, { serverProps: server.props, DB });
+	const scheduler = createSchedule({
+		onError: (err, job) => console.error(`schedule error (${job.name}):`, err),
+	});
 
+	const modules = await Modules(modulesDir, {
+		serverProps: server.props,
+		DB,
+		registerSchedule: (name, scheduleDef, ctx = {}) => {
+			if (typeof name !== 'string' || !name) throw new Error('registerSchedule(name, ...) name must be a non-empty string');
+			return scheduler.registerSchedule(name, scheduleDef, {
+				DB,
+				env,
+				server,
+				client: mongo.client,
+				database: mongoDb,
+				...ctx,
+			});
+		},
+	});
+
+	// validators
 	for (const [name, mod] of Object.entries(modules)) {
 		const v = mod?.validate;
 		if (!v) continue;
@@ -34,28 +54,39 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		if (typeof v.table !== 'string' || !v.table) throw new Error(`Module "${name}" validate.table must be a string`);
 		if (typeof v.register !== 'function') throw new Error(`Module "${name}" validate.register must be a function`);
 
-		let produced;
-
-		// register() => factory (boot-time)
-		// register(doc) => direct validator (runtime)
-		if (v.register.length === 0) {
-			produced = await v.register();
-		} else {
-			produced = v.register;
-		}
-
+		const produced = (v.register.length === 0) ? await v.register() : v.register;
 		const list = Array.isArray(produced) ? produced : [produced];
 
 		for (const fn of list) {
-			if (typeof fn !== 'function') {
-				throw new Error(`Module "${name}" validate.register must produce a validator function (or array of them)`);
-			}
+			if (typeof fn !== 'function') throw new Error(`Module "${name}" validate.register must produce a function (or array)`);
 			registerValidator(v.table, fn);
 		}
 	}
 
-	// now start server, get node http.Server back
+	// schedule-only modules (or declarative schedules)
+	for (const [name, mod] of Object.entries(modules)) {
+		const defs = mod?.schedule ?? null;
+		if (!defs) continue;
+
+		const list = Array.isArray(defs) ? defs : [defs];
+
+		for (let i = 0; i < list.length; i++) {
+			const def = list[i];
+			const id = def?.name || String(i);
+
+			scheduler.registerSchedule(`${name}:${id}`, def, {
+				DB,
+				env,
+				server,
+				client: mongo.client,
+				database: mongoDb,
+			});
+		}
+	}
+
+	// now start server...
 	const nodeServer = await server.listen(port);
+
 
 	// websocket uses the node server
 	const wss = new WebSocketServer({ server: nodeServer });
@@ -262,6 +293,15 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 	}, 30000);
 
 	wss.on("close", () => clearInterval(interval));
+
+	const shutdown = async () => {
+		try { scheduler.stopAll(); } catch { }
+		try { await DB.close?.(); } catch { }
+		try { await server.close?.(); } catch { }
+	};
+
+	process.on('SIGINT', shutdown);
+	process.on('SIGTERM', shutdown);
 };
 
 export default core;
