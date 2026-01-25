@@ -1,6 +1,7 @@
 import database from 'destam-db';
 import { WebSocketServer } from 'ws';
 import mongodb from 'destam-db/driver/mongodb.js';
+import { OObject } from 'destam';
 
 import { default as syncNet } from './sync.js';
 import Modules from './modules.js';
@@ -131,7 +132,9 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 
 			const user = await DB.instance(userQuery, 'users');
 
-			const sync = await DB.reuse('state', { user: user.query.uuid });
+			const state = await DB.reuse('state', { user: user.query.uuid });
+
+			const sync = OObject({ state });
 
 			return { session, user, sync };
 		};

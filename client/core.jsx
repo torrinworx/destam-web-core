@@ -202,8 +202,8 @@ export const DB = database(driver);
 
 let clientPromise;
 export const clientState = async () => {
-  if (!clientPromise) clientPromise = DB.reuse('client', { state: 'client' });
-  return await clientPromise;
+	if (!clientPromise) clientPromise = DB.reuse('client', { state: 'client' });
+	return await clientPromise;
 };
 
 export const reconnectWS = async () => {
@@ -228,7 +228,6 @@ export const syncState = async () => {
 
 		const state = OObject({
 			sync: null,
-
 			connected: wsConnected,
 			authed: wsAuthed,
 			authKnown: wsAuthKnown,
@@ -243,7 +242,6 @@ export const syncState = async () => {
 				try { stopSync?.(); } catch { }
 				stopSync = null;
 				syncStarted = false;
-
 				state.sync = null;
 			}
 		});
@@ -251,12 +249,13 @@ export const syncState = async () => {
 		// If server already told us we're authed before watchers attached, start now
 		if (wsAuthed.get()) startSyncOnce(state);
 
-		state.enter = async ({ email, name, password, ...props }) => {
+		await wsAuthKnown.defined(v => v === true);
+
+		state.enter = async ({ email, name, password }) => {
 			const response = await modReq('enter', {
 				email: email.get(),
 				name: name?.get(),
 				password: password.get(),
-				...props,
 			});
 
 			if (response?.token) {
