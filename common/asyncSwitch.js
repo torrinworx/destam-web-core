@@ -1,5 +1,5 @@
 import { Synthetic } from "destam/Events.js";
-import Observer, { watchGovernor } from "destam/Observer";
+import Observer, { watchGovernor } from "destam/Observer.js";
 
 export const asyncSwitch = (obs, asyncFn) => {
 	let cache;
