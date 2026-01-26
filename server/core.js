@@ -10,7 +10,7 @@ import { parse } from '../common/clone.js';
 import createValidation from './validate.js';
 import createSchedule from './schedule.js';
 
-const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table, env, port }) => {
+const core = async ({ server = null, root, modulesDir, db, table, env, port }) => {
 	server = server ? server() : http();
 
 	if (env === 'production') server.production({ root });
@@ -64,7 +64,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		}
 	}
 
-	// schedule-only modules (or declarative schedules)
+	// schedulers
 	for (const [name, mod] of Object.entries(modules)) {
 		const defs = mod?.schedule ?? null;
 		if (!defs) continue;
@@ -85,11 +85,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		}
 	}
 
-	// now start server...
 	const nodeServer = await server.listen(port);
-
-
-	// websocket uses the node server
 	const wss = new WebSocketServer({ server: nodeServer });
 
 	wss.on('connection', async (ws, req) => {
@@ -114,13 +110,11 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 		};
 
 		const resolveAuth = async token => {
-			// sessions: never use reuse() here (don’t create on auth)
 			const sessionQuery = await DB.query('sessions', { uuid: token });
 			if (!sessionQuery) return null;
 
 			const session = await DB.instance(sessionQuery, 'sessions');
 
-			// make expires a number (supports old data too)
 			const expires =
 				typeof session.expires === 'number' ? session.expires : +new Date(session.expires);
 
@@ -145,11 +139,50 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 
 		let user = null;
 		let sync = null;
-		let onConProps = null;
 
 		let syncStarted = false;
-
 		let stopSync = null;
+
+		const onConCleanups = [];
+		const ranOnCon = new Set();
+
+		const addCleanup = ret => {
+			if (!ret) return;
+			if (typeof ret === 'function') {
+				onConCleanups.push(ret);
+				return;
+			}
+			if (Array.isArray(ret)) {
+				for (const item of ret) addCleanup(item);
+			}
+		};
+
+		const runModuleOnCon = async () => {
+			for (const [name, mod] of Object.entries(modules)) {
+				if (ranOnCon.has(name)) continue;
+				if (typeof mod?.onCon !== 'function') continue;
+
+				if (!authed && mod.authenticated !== false) continue;
+
+				ranOnCon.add(name);
+
+				try {
+					const ret = await mod.onCon({
+						server,
+						sync,
+						user,
+						DB,
+						env,
+						client: mongo.client,
+						database: mongoDb,
+						token,
+					});
+					addCleanup(ret);
+				} catch (err) {
+					console.error(`module onCon error (${name})`, err);
+				}
+			}
+		};
 
 		const startSyncOnce = () => {
 			if (syncStarted) return;
@@ -179,6 +212,8 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 
 			if (!token) {
 				send({ name: 'auth', ok: false });
+				// allow unauth onCon modules to start
+				await runModuleOnCon();
 				return false;
 			}
 
@@ -188,6 +223,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			} catch (e) {
 				console.error('auth resolve error:', e);
 				send({ name: 'auth', ok: false });
+				await runModuleOnCon();
 				return false;
 			}
 
@@ -196,6 +232,7 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 
 			if (!auth) {
 				send({ name: 'auth', ok: false });
+				await runModuleOnCon();
 				return false;
 			}
 
@@ -209,11 +246,8 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			// tell client it’s safe to begin sync (client should wait for this)
 			send({ name: 'auth', ok: true, token });
 
-			if (onCon) {
-				Promise.resolve(onCon(ws, req, user, sync, token))
-					.then(v => (onConProps = v))
-					.catch(err => console.error('onCon error:', err));
-			}
+			// now run module-defined onCon (auth-required ones will now run too)
+			await runModuleOnCon();
 
 			return true;
 		};
@@ -255,12 +289,10 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 			try {
 				const result = await module.onMsg(
 					msg.props,
-					onConProps || null,
 					{
 						server,
 						sync,
 						user,
-						onEnter: msg.name === 'enter' ? onEnter : null,
 						DB,
 						env,
 						client: mongo.client,
@@ -281,6 +313,9 @@ const core = async ({ server = null, root, modulesDir, onCon, onEnter, db, table
 
 		ws.on('close', () => {
 			try { stopSync?.(); } catch { }
+			for (const fn of onConCleanups) {
+				try { fn(); } catch { }
+			}
 		});
 	});
 

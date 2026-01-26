@@ -25,7 +25,7 @@ export default () => {
 	return {
 		authenticated: false,
 
-		onMsg: async ({ email, name, password }, _, { DB, onEnter }) => {
+		onMsg: async ({ email, name, password }, { DB, onEnter }) => {
 			try {
 				const isDev =
 					process.env.NODE_ENV === 'development' ||
