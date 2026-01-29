@@ -114,6 +114,8 @@ export const createSchedule = ({ onError = null } = {}) => {
 			stop = startEvery(job);
 		}
 
+		job.stop = stop;
+
 		jobs.add(job);
 
 		return () => {
@@ -123,6 +125,9 @@ export const createSchedule = ({ onError = null } = {}) => {
 	};
 
 	const stopAll = () => {
+		for (const job of jobs) {
+			try { job.stop?.(); } catch { }
+		}
 		for (const t of timers) {
 			try { clearInterval(t); } catch { }
 			try { clearTimeout(t); } catch { }

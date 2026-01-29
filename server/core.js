@@ -334,8 +334,23 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 
 	const shutdown = async () => {
 		try { scheduler.stopAll(); } catch { }
+
+		for (const ws of wss.clients) {
+			try { ws.terminate(); } catch { }
+		}
+		try { wss.close(); } catch { }
+
 		try { await DB.close?.(); } catch { }
+
+		if (nodeServer) {
+			await new Promise(r => {
+				nodeServer.close(r);
+			});
+		}
+
 		try { await server.close?.(); } catch { }
+
+		process.exit(0);
 	};
 
 	process.on('SIGINT', shutdown);
