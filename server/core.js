@@ -30,17 +30,21 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		onError: (err, job) => console.error(`schedule error (${job.name}):`, err),
 	});
 
-	const modules = await Modules(modulesDir, {
+	const modProps = {
 		serverProps: server.props,
 		DB,
+		env,
+		server,
+		client: mongo.client,
+		database: mongoDb,
+	}
+
+	const modules = await Modules(modulesDir, {
+		...modProps,
 		registerSchedule: (name, scheduleDef, ctx = {}) => {
 			if (typeof name !== 'string' || !name) throw new Error('registerSchedule(name, ...) name must be a non-empty string');
 			return scheduler.registerSchedule(name, scheduleDef, {
-				DB,
-				env,
-				server,
-				client: mongo.client,
-				database: mongoDb,
+				...modProps,
 				...ctx,
 			});
 		},
@@ -75,13 +79,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 			const def = list[i];
 			const id = def?.name || String(i);
 
-			scheduler.registerSchedule(`${name}:${id}`, def, {
-				DB,
-				env,
-				server,
-				client: mongo.client,
-				database: mongoDb,
-			});
+			scheduler.registerSchedule(`${name}:${id}`, def, modProps);
 		}
 	}
 
@@ -168,14 +166,10 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 
 				try {
 					const ret = await mod.onCon({
-						server,
 						sync,
 						user,
-						DB,
-						env,
-						client: mongo.client,
-						database: mongoDb,
 						token,
+						...modProps
 					});
 					addCleanup(ret);
 				} catch (err) {
@@ -290,14 +284,10 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 				const result = await module.onMsg(
 					msg.props,
 					{
-						server,
 						sync,
 						user,
-						DB,
-						env,
-						client: mongo.client,
-						database: await mongo.database,
 						token,
+						...modProps
 					}
 				);
 
