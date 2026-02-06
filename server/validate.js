@@ -1,4 +1,3 @@
-// validate.js (ODB version, no "DB" naming)
 export const createValidation = odb => {
 	if (!odb) throw new Error('createValidation(odb): odb is required');
 
