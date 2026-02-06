@@ -6,8 +6,6 @@ export default () => {
         validate: {
             table: 'users',
 
-            // ODB docs shouldn’t rely on `doc.query.*` anymore.
-            // Just normalize fields directly on the document.
             register: user => {
                 if (!user || typeof user !== 'object') return;
 
