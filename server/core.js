@@ -36,10 +36,6 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 	odb = validation.odb;
 	const { registerValidator } = validation;
 
-	// optional forwards if your driver exposes these
-	const client = odb?.driver?.client ?? null;
-	const database = odb?.driver?.database ?? odb?.driver?.db ?? null;
-
 	const scheduler = createSchedule({
 		onError: (err, job) => console.error(`schedule error (${job.name}):`, err),
 	});
@@ -49,8 +45,6 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		odb,
 		env,
 		server,
-		client,
-		database,
 		registerValidator,
 	};
 

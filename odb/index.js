@@ -50,9 +50,14 @@ const deepNormalize = v => {
 };
 
 const makeIndex = (state) => {
-	// index should be plain JSON and query-friendly
-	// normalize UUID -> hex string, Date -> number
-	return deepNormalize(JSON.parse(JSON.stringify(state)));
+	const index = deepNormalize(JSON.parse(JSON.stringify(state)));
+
+	index.id = keyFromState(state);
+
+	if (index.createdAt == null && state.createdAt != null) index.createdAt = state.createdAt;
+	if (index.modifiedAt == null && state.modifiedAt != null) index.modifiedAt = state.modifiedAt;
+
+	return index;
 };
 
 const keyFromState = (state) => {
