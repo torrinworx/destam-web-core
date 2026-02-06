@@ -1,6 +1,7 @@
+// Enter.js (ODB + Destam UUID.toHex tokens/ids)
 import bcryptjs from 'bcryptjs';
-import { randomUUID } from 'node:crypto';
 import { OObject } from 'destam';
+import UUID from 'destam/UUID.js';
 
 const normalizeEmail = email =>
 	typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -13,25 +14,22 @@ const isValidEmail = email =>
 
 const createSession = async (odb, user) => {
 	const expires = Date.now() + 1000 * 60 * 60 * 24 * 30; // 30 days
-	const token = randomUUID();
+	const token = UUID().toHex();
 
-	const userUuid = user?.uuid ?? user?.query?.uuid;
-	if (!userUuid) throw new Error('createSession: user.uuid missing');
+	if (!user?.uuid) throw new Error('createSession: user.uuid missing');
 
 	const session = await odb.open({
 		collection: 'sessions',
 		query: { uuid: token },
 		value: OObject({
 			uuid: token,
-			user: userUuid,
+			user: user.uuid,
 			expires,
 			status: true,
 		}),
 	});
 
-	// ensure token is usable immediately
 	await session.$odb.flush();
-
 	return token;
 };
 
@@ -39,11 +37,8 @@ export default () => {
 	return {
 		authenticated: false,
 
-		onMsg: async ({ email, name, password }, ctx) => {
-			const odb = ctx?.odb ?? ctx?.DB?.odb;
-			const onEnter = ctx?.onEnter;
-
-			if (!odb) throw new Error('Enter.js: odb not provided in module context');
+		onMsg: async ({ email, name, password }, { odb, onEnter }) => {
+			if (!odb) throw new Error('Enter.js: odb not provided');
 
 			try {
 				const isDev =
@@ -86,7 +81,7 @@ export default () => {
 				const salt = await bcryptjs.genSalt(saltRounds);
 				const hashedPassword = await bcryptjs.hash(password, salt);
 
-				const userUuid = randomUUID();
+				const userUuid = UUID().toHex();
 
 				const newUser = await odb.open({
 					collection: 'users',
@@ -99,7 +94,6 @@ export default () => {
 					}),
 				});
 
-				// make sure it’s persisted before creating state/session
 				await newUser.$odb.flush();
 
 				const state = await odb.open({
@@ -107,6 +101,7 @@ export default () => {
 					query: { user: userUuid },
 					value: OObject({ user: userUuid }),
 				});
+
 				await state.$odb.flush();
 
 				if (onEnter) await onEnter({ email, name, user: newUser });
