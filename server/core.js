@@ -1,13 +1,15 @@
-import database from 'destam-db';
+// core.js
 import { WebSocketServer } from 'ws';
-import mongodb from 'destam-db/driver/mongodb.js';
 import { OObject } from 'destam';
 
+import createODB from '../odb/index.js';
+import mongodbDriver from '../odb/drivers/mongodb.js';
+
+import createValidation from './validate.js';
 import { default as syncNet } from './sync.js';
 import Modules from './modules.js';
 import http from './servers/http.js';
 import { parse } from '../common/clone.js';
-import createValidation from './validate.js';
 import createSchedule from './schedule.js';
 
 const core = async ({ server = null, root, modulesDir, db, table, env, port }) => {
@@ -20,11 +22,23 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		server.development({ vite, root });
 	}
 
-	const mongo = mongodb(db, table);
-	const mongoDb = await mongo.database;
+	let odb = await createODB({
+		driver: mongodbDriver,
+		throttleMs: 100,
+		driverProps: {
+			uri: db,
+			dbName: table,
+		},
+	});
 
-	const rawDB = database(mongo);
-	const { DB, registerValidator } = createValidation(rawDB);
+	// Wrap ODB so validators run automatically on open/findOne/findMany
+	const validation = createValidation(odb);
+	odb = validation.odb;
+	const { registerValidator } = validation;
+
+	// optional forwards if your driver exposes these
+	const client = odb?.driver?.client ?? null;
+	const database = odb?.driver?.database ?? odb?.driver?.db ?? null;
 
 	const scheduler = createSchedule({
 		onError: (err, job) => console.error(`schedule error (${job.name}):`, err),
@@ -32,12 +46,13 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 
 	const modProps = {
 		serverProps: server.props,
-		DB,
+		odb,
 		env,
 		server,
-		client: mongo.client,
-		database: mongoDb,
-	}
+		client,
+		database,
+		registerValidator,
+	};
 
 	const modules = await Modules(modulesDir, {
 		...modProps,
@@ -50,7 +65,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		},
 	});
 
-	// validators
+	// module-provided validators
 	for (const [name, mod] of Object.entries(modules)) {
 		const v = mod?.validate;
 		if (!v) continue;
@@ -78,7 +93,6 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		for (let i = 0; i < list.length; i++) {
 			const def = list[i];
 			const id = def?.name || String(i);
-
 			scheduler.registerSchedule(`${name}:${id}`, def, modProps);
 		}
 	}
@@ -108,10 +122,8 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		};
 
 		const resolveAuth = async token => {
-			const sessionQuery = await DB.query('sessions', { uuid: token });
-			if (!sessionQuery) return null;
-
-			const session = await DB.instance(sessionQuery, 'sessions');
+			const session = await odb.findOne({ collection: 'sessions', query: { uuid: token } });
+			if (!session) return null;
 
 			const expires =
 				typeof session.expires === 'number' ? session.expires : +new Date(session.expires);
@@ -119,12 +131,19 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 			if (!expires || Date.now() >= expires) return null;
 			if (session.status === false) return null;
 
-			const userQuery = await DB.query('users', { uuid: session.query.user });
-			if (!userQuery) return null;
+			const userId = session.user ?? session.query?.user ?? null;
+			if (!userId) return null;
 
-			const user = await DB.instance(userQuery, 'users');
+			const user = await odb.findOne({ collection: 'users', query: { uuid: userId } });
+			if (!user) return null;
 
-			const state = await DB.reuse('state', { user: user.query.uuid });
+			const userUuid = user.uuid ?? user.query?.uuid ?? userId;
+
+			const state = await odb.open({
+				collection: 'state',
+				query: { user: userUuid },
+				value: OObject({ user: userUuid }),
+			});
 
 			const sync = OObject({ state });
 
@@ -169,7 +188,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 						sync,
 						user,
 						token,
-						...modProps
+						...modProps,
 					});
 					addCleanup(ret);
 				} catch (err) {
@@ -185,7 +204,6 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 			Promise.resolve()
 				.then(() => syncNet(() => authed === true, ws, sync))
 				.then(ret => {
-					// if syncNet returns an unsubscribe/cleanup function, keep it
 					if (typeof ret === 'function') stopSync = ret;
 				})
 				.catch(err => {
@@ -206,7 +224,6 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 
 			if (!token) {
 				send({ name: 'auth', ok: false });
-				// allow unauth onCon modules to start
 				await runModuleOnCon();
 				return false;
 			}
@@ -221,7 +238,6 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 				return false;
 			}
 
-			// if another auth started while we awaited, ignore this result
 			if (myAttempt !== authAttempt) return false;
 
 			if (!auth) {
@@ -234,39 +250,30 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 			user = auth.user;
 			sync = auth.sync;
 
-			// start sync BEFORE any slow onCon logic
 			startSyncOnce();
 
-			// tell client it’s safe to begin sync (client should wait for this)
 			send({ name: 'auth', ok: true, token });
 
-			// now run module-defined onCon (auth-required ones will now run too)
 			await runModuleOnCon();
 
 			return true;
 		};
 
-		// attempt auth immediately from query token
 		await setAuthToken(token);
 
 		ws.on('message', async raw => {
 			let msg;
 			try {
 				msg = parse(raw);
-			} catch (e) {
+			} catch {
 				return send({ error: 'Bad message format' });
 			}
 
-			// let syncNet own "sync" messages; but only after auth_ok
 			if (msg?.name === 'sync') {
-				if (!authed) {
-					// don’t silently drop; this is how clients “hang”
-					return send({ error: 'Not authenticated yet (wait for auth.ok)' });
-				}
+				if (!authed) return send({ error: 'Not authenticated yet (wait for auth.ok)' });
 				return;
 			}
 
-			// allow late token set (ex: after enter/login)
 			if (!authed && msg?.token) {
 				await setAuthToken(msg.token);
 			}
@@ -287,7 +294,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 						sync,
 						user,
 						token,
-						...modProps
+						...modProps,
 					}
 				);
 
@@ -299,7 +306,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		});
 
 		ws.isAlive = true;
-		ws.on("pong", () => { ws.isAlive = true; });
+		ws.on('pong', () => { ws.isAlive = true; });
 
 		ws.on('close', () => {
 			try { stopSync?.(); } catch { }
@@ -320,7 +327,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		}
 	}, 30000);
 
-	wss.on("close", () => clearInterval(interval));
+	wss.on('close', () => clearInterval(interval));
 
 	const shutdown = async () => {
 		try { scheduler.stopAll(); } catch { }
@@ -330,7 +337,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 		}
 		try { wss.close(); } catch { }
 
-		try { await DB.close?.(); } catch { }
+		try { await odb.close?.(); } catch { }
 
 		if (nodeServer) {
 			await new Promise(r => {

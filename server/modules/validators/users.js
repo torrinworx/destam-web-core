@@ -1,28 +1,37 @@
-const normalizeEmail = (email) =>
-	typeof email === 'string' ? email.trim().toLowerCase() : '';
+const normalizeEmail = email =>
+    typeof email === 'string' ? email.trim().toLowerCase() : '';
 
 export default () => {
-	return {
-		validate: {
-			table: 'users',
-			register: (user) => {
-				if (!user.query || typeof user.query !== 'object') user.query = {};
+    return {
+        validate: {
+            table: 'users',
 
-				const email = normalizeEmail(user.email || user.query.email);
-				if (email) {
-					user.email = email;
-					user.query.email = email;
-				}
+            // ODB docs shouldn’t rely on `doc.query.*` anymore.
+            // Just normalize fields directly on the document.
+            register: user => {
+                if (!user || typeof user !== 'object') return;
 
-				user.name = typeof user.name === 'string' ? user.name.trim() : '';
+                // normalize now
+                const email = normalizeEmail(user.email);
+                if (email && user.email !== email) user.email = email;
 
-				if (typeof user.password !== 'string') user.password = '';
+                user.name = typeof user.name === 'string' ? user.name.trim() : '';
+                if (typeof user.password !== 'string') user.password = '';
 
-				user.observer?.path('email').watch(() => {
-					const e = normalizeEmail(user.email);
-					if (e && user.query.email !== e) user.query.email = e;
-				});
-			},
-		},
-	};
+                // keep email normalized if it changes later
+                const stop =
+                    user.observer
+                        ?.path('email')
+                        .watch(() => {
+                            const e = normalizeEmail(user.email);
+                            if (e && user.email !== e) user.email = e;
+                        });
+
+                // let the caller clean this up if they support it
+                return () => {
+                    try { stop?.(); } catch { }
+                };
+            },
+        },
+    };
 };

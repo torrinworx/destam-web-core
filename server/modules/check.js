@@ -1,13 +1,16 @@
 export default () => {
 	return {
 		authenticated: false,
-		onMsg: async ({ email }, { DB }) => {
+		onMsg: async ({ email }, { odb }) => {
 			try {
-				const user = await DB.query('users', { 'email': email });
-				if (user) return true;
-				else return false;
+				const user = await odb.findOne({
+					collection: 'users',
+					query: { email },
+				});
+
+				return !!user;
 			} catch (e) {
-				console.log(e)
+				console.log(e);
 				return e;
 			}
 		},

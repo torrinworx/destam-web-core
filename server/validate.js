@@ -1,57 +1,122 @@
-export const createValidation = (db) => {
-	const validators = new Map(); // table -> Set<fn>
+// validate.js (ODB version, no "DB" naming)
+export const createValidation = odb => {
+	if (!odb) throw new Error('createValidation(odb): odb is required');
+
+	const validators = new Map(); // collection -> Set<fn>
 	const validated = new WeakSet(); // doc -> validated once per process lifetime
 
-	const registerValidator = (table, fn) => {
-		if (typeof table !== 'string' || !table) throw new Error('table must be a non-empty string');
+	const cleanupMap = new WeakMap(); // doc -> Array<fn>
+	const patched = new WeakSet(); // doc -> patched $odb.dispose/remove
+
+	const registerValidator = (collection, fn) => {
+		if (typeof collection !== 'string' || !collection) throw new Error('collection must be a non-empty string');
 		if (typeof fn !== 'function') throw new Error('validator must be a function');
 
-		let set = validators.get(table);
-		if (!set) validators.set(table, (set = new Set()));
+		let set = validators.get(collection);
+		if (!set) validators.set(collection, (set = new Set()));
 		set.add(fn);
 
 		return () => set.delete(fn);
 	};
 
-	const validate = async (table, doc) => {
+	const addCleanup = (doc, ret) => {
+		if (!ret) return;
+
+		const list = cleanupMap.get(doc) ?? [];
+		const push = fn => {
+			if (typeof fn === 'function') list.push(fn);
+		};
+
+		if (typeof ret === 'function') push(ret);
+		else if (Array.isArray(ret)) for (const item of ret) addCleanup(doc, item);
+
+		if (list.length) cleanupMap.set(doc, list);
+	};
+
+	const runCleanups = doc => {
+		const list = cleanupMap.get(doc);
+		if (!list) return;
+
+		cleanupMap.delete(doc);
+		for (const fn of list) {
+			try { fn(); } catch (e) { console.error('validator cleanup error:', e); }
+		}
+	};
+
+	const patchDocHandle = doc => {
+		if (!doc || typeof doc !== 'object') return;
+		if (!doc.$odb || patched.has(doc)) return;
+
+		patched.add(doc);
+
+		// best-effort: if $odb is frozen/non-writable, skip patching
+		try {
+			const origDispose = typeof doc.$odb.dispose === 'function' ? doc.$odb.dispose.bind(doc.$odb) : null;
+			const origRemove = typeof doc.$odb.remove === 'function' ? doc.$odb.remove.bind(doc.$odb) : null;
+
+			if (origDispose) {
+				doc.$odb.dispose = async (...args) => {
+					runCleanups(doc);
+					return await origDispose(...args);
+				};
+			}
+
+			if (origRemove) {
+				doc.$odb.remove = async (...args) => {
+					runCleanups(doc);
+					return await origRemove(...args);
+				};
+			}
+		} catch {
+			// ignore
+		}
+	};
+
+	const validate = async (collection, doc) => {
 		if (!doc) return null;
 		if (typeof doc !== 'object') return doc;
 
+		// ODB caches docs, so this is effectively once per document per process
 		if (validated.has(doc)) return doc;
 
-		const set = validators.get(table);
+		const set = validators.get(collection);
 		if (set) {
 			for (const fn of set) {
-				// compat w/ your old behavior: truthy => reject
-				if (await fn(doc)) return null;
+				// compat: returning true means "reject"
+				const ret = await fn(doc);
+
+				// allow validators to return cleanup(s)
+				addCleanup(doc, ret);
+
+				if (ret === true) return null;
 			}
 		}
 
+		patchDocHandle(doc);
 		validated.add(doc);
 		return doc;
 	};
 
-	const DB = async (table, query) => {
-		return await validate(table, await db(table, query));
+	// Create a validated wrapper that still behaves like odb (driver, etc via prototype)
+	const vodb = Object.create(odb);
+
+	vodb.open = async ({ collection, query, value }) =>
+		validate(collection, await odb.open({ collection, query, value }));
+
+	vodb.findOne = async ({ collection, query }) =>
+		validate(collection, await odb.findOne({ collection, query }));
+
+	vodb.findMany = async ({ collection, query, options }) => {
+		const docs = await odb.findMany({ collection, query, options });
+		for (let i = 0; i < docs.length; i++) docs[i] = await validate(collection, docs[i]);
+		return docs.filter(Boolean);
 	};
 
-	// passthrough stuff
-	for (const k of Object.keys(db)) DB[k] = db[k];
+	// passthrough
+	vodb.remove = args => odb.remove(args);
+	vodb.close = () => odb.close();
 
-	DB.reuse = async (table, query) => {
-		return await validate(table, await db.reuse(table, query));
-	};
-
-	// Optional: validate instance() only if caller provides table
-	DB.instance = async (storeOrQuery, table = null) => {
-		const doc = await db.instance(storeOrQuery);
-		return table ? validate(table, doc) : doc;
-	};
-
-	DB.registerValidator = registerValidator;
-	DB.validate = validate;
-
-	return { DB, registerValidator, validate };
+	return { odb: vodb, registerValidator, validate };
 };
 
 export default createValidation;

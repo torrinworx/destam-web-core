@@ -1,31 +1,50 @@
 import bcryptjs from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
+import { OObject } from 'destam';
 
-const createSession = async (DB, user) => {
-	const expires = Date.now() + 1000 * 60 * 60 * 24 * 30; // 30 days
-	const session = await DB('sessions');
-	session.query.user = user.query.uuid;
-	session.expires = expires;
-	session.status = true;
-
-	await DB.flush(session);
-
-	return session.query.uuid;
-};
-
-const normalizeEmail = (email) =>
+const normalizeEmail = email =>
 	typeof email === 'string' ? email.trim().toLowerCase() : '';
 
-const normalizeName = (name) =>
+const normalizeName = name =>
 	typeof name === 'string' ? name.trim() : '';
 
-const isValidEmail = (email) =>
+const isValidEmail = email =>
 	/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const createSession = async (odb, user) => {
+	const expires = Date.now() + 1000 * 60 * 60 * 24 * 30; // 30 days
+	const token = randomUUID();
+
+	const userUuid = user?.uuid ?? user?.query?.uuid;
+	if (!userUuid) throw new Error('createSession: user.uuid missing');
+
+	const session = await odb.open({
+		collection: 'sessions',
+		query: { uuid: token },
+		value: OObject({
+			uuid: token,
+			user: userUuid,
+			expires,
+			status: true,
+		}),
+	});
+
+	// ensure token is usable immediately
+	await session.$odb.flush();
+
+	return token;
+};
 
 export default () => {
 	return {
 		authenticated: false,
 
-		onMsg: async ({ email, name, password }, { DB, onEnter }) => {
+		onMsg: async ({ email, name, password }, ctx) => {
+			const odb = ctx?.odb ?? ctx?.DB?.odb;
+			const onEnter = ctx?.onEnter;
+
+			if (!odb) throw new Error('Enter.js: odb not provided in module context');
+
 			try {
 				const isDev =
 					process.env.NODE_ENV === 'development' ||
@@ -38,12 +57,10 @@ export default () => {
 				if (!email) return { error: 'Email is required.' };
 				if (!isValidEmail(email)) return { error: 'Please enter a valid email address.' };
 
-				const userQuery = await DB.query('users', { email });
+				const user = await odb.findOne({ collection: 'users', query: { email } });
 
 				// Login
-				if (userQuery) {
-					const user = await DB.instance(userQuery);
-
+				if (user) {
 					if (!isDev && !password) return { error: 'Password is required.' };
 
 					if (typeof user.password !== 'string' || user.password.length === 0) {
@@ -53,34 +70,48 @@ export default () => {
 					const validPassword = await bcryptjs.compare(password, user.password);
 					if (!validPassword) return { error: 'Invalid email or password' };
 
-					return { token: await createSession(DB, user) };
-				} else { // Signup
-					if (!name) return { error: 'Name is required.' };
-					if (name.length > 20) return { error: 'Name must be 20 characters or less.' };
-
-					if (!isDev) {
-						if (!password) return { error: 'Password is required.' };
-						if (password.length < 8) return { error: 'Password must be at least 8 characters.' };
-					}
-
-					const saltRounds = 10;
-					const salt = await bcryptjs.genSalt(saltRounds);
-					const hashedPassword = await bcryptjs.hash(password, salt);
-
-					const user = await DB('users');
-					user.query.email = email;
-					user.email = email;
-					user.name = name;
-					user.password = hashedPassword;
-
-					await DB.flush(user);
-
-					await DB.reuse('state', { user: user.query.uuid });
-
-					if (onEnter) await onEnter({ email, name, user });
-
-					return { token: await createSession(DB, user) };
+					return { token: await createSession(odb, user) };
 				}
+
+				// Signup
+				if (!name) return { error: 'Name is required.' };
+				if (name.length > 20) return { error: 'Name must be 20 characters or less.' };
+
+				if (!isDev) {
+					if (!password) return { error: 'Password is required.' };
+					if (password.length < 8) return { error: 'Password must be at least 8 characters.' };
+				}
+
+				const saltRounds = 10;
+				const salt = await bcryptjs.genSalt(saltRounds);
+				const hashedPassword = await bcryptjs.hash(password, salt);
+
+				const userUuid = randomUUID();
+
+				const newUser = await odb.open({
+					collection: 'users',
+					query: { uuid: userUuid },
+					value: OObject({
+						uuid: userUuid,
+						email,
+						name,
+						password: hashedPassword,
+					}),
+				});
+
+				// make sure it’s persisted before creating state/session
+				await newUser.$odb.flush();
+
+				const state = await odb.open({
+					collection: 'state',
+					query: { user: userUuid },
+					value: OObject({ user: userUuid }),
+				});
+				await state.$odb.flush();
+
+				if (onEnter) await onEnter({ email, name, user: newUser });
+
+				return { token: await createSession(odb, newUser) };
 			} catch (error) {
 				console.error('enter.js error:', error);
 				return { error: 'An internal error occurred, please try again later.' };
