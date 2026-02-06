@@ -31,6 +31,7 @@
         "@babel/parser": "^7.25.6",
         "@babel/plugin-syntax-jsx": "^7.24.7",
         "nodemon": "^3.1.7",
-        "vite": "^5.4.10"
+        "vite": "^5.4.10",
+        "fake-indexeddb": "^6.0.0"
     }
 }
