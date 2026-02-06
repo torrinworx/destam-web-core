@@ -1,4 +1,4 @@
-// core.js
+// server/core.js
 import { WebSocketServer } from 'ws';
 import { OObject } from 'destam';
 
@@ -119,28 +119,26 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 			const session = await odb.findOne({ collection: 'sessions', query: { uuid: token } });
 			if (!session) return null;
 
-			const expires =
-				typeof session.expires === 'number' ? session.expires : +new Date(session.expires);
+			const expires = typeof session.expires === 'number'
+				? session.expires
+				: +new Date(session.expires);
 
 			if (!expires || Date.now() >= expires) return null;
 			if (session.status === false) return null;
 
-			const userId = session.user ?? session.query?.user ?? null;
-			if (!userId) return null;
+			const userKey = typeof session.user === 'string' ? session.user : null;
+			if (!userKey) return null;
 
-			const user = await odb.findOne({ collection: 'users', query: { uuid: userId } });
+			const user = await odb.findOne({ collection: 'users', query: { id: userKey } });
 			if (!user) return null;
-
-			const userUuid = user.uuid ?? user.query?.uuid ?? userId;
 
 			const state = await odb.open({
 				collection: 'state',
-				query: { user: userUuid },
-				value: OObject({ user: userUuid }),
+				query: { user: userKey },
+				value: OObject({ user: userKey }),
 			});
 
 			const sync = OObject({ state });
-
 			return { session, user, sync };
 		};
 
