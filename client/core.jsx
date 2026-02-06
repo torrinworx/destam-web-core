@@ -1,5 +1,3 @@
-import database from 'destam-db';
-import indexeddb from 'destam-db/driver/indexeddb.js';
 import { OObject, UUID, Observer } from 'destam';
 
 import { default as syncNet } from './sync.js';
@@ -194,16 +192,6 @@ export const modReq = (name, props, { timeout = 15000 } = {}) => {
 			reject(err);
 		}
 	});
-};
-
-
-const driver = indexeddb('webcore');
-export const DB = database(driver);
-
-let clientPromise;
-export const clientState = async () => {
-	if (!clientPromise) clientPromise = DB.reuse('client', { state: 'client' });
-	return await clientPromise;
 };
 
 export const reconnectWS = async () => {
