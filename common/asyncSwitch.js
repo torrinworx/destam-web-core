@@ -8,34 +8,58 @@ export const asyncSwitch = (obs, asyncFn) => {
 		() => cache,
 		null,
 		(listener) => {
-			const cleanupFns = [];
-			let seq = 0;
+			let runId = 0;
+			let disposed = false;
+
+			let runCleanups = [];
+
+			const cleanupRun = () => {
+				while (runCleanups.length) {
+					try {
+						runCleanups.pop()();
+					} catch {
+						// todo? 
+					}
+				}
+			};
 
 			const run = () => {
-				// cleanup previous run resources
-				while (cleanupFns.length) cleanupFns.pop()();
+				cleanupRun();
 
-				const cur = ++seq;
+				const myRun = ++runId;
 				let cancelled = false;
-				cleanupFns.push(() => { cancelled = true; });
 
-				Promise.resolve(asyncFn(obs.get(), fn => cleanupFns.push(fn)))
+				const onCleanup = (fn) => {
+					if (typeof fn === "function") runCleanups.push(fn);
+				};
+
+				onCleanup(() => {
+					cancelled = true;
+				});
+
+				Promise.resolve()
+					.then(() => asyncFn(obs.get(), onCleanup))
 					.then((val) => {
+						if (disposed) return;
 						if (cancelled) return;
-						if (cur !== seq) return; // latest wins
-						listener([Synthetic(cache, (cache = val))]);
+						if (myRun !== runId) return;
+
+						const prev = cache;
+						cache = val;
+						listener([Synthetic(prev, cache)]);
 					})
 					.catch(() => {
 						// todo
 					});
 			};
 
-			const parent = obs.register_(run, watchGovernor);
+			const stopParent = obs.register_(run, watchGovernor);
 			run();
 
 			return () => {
-				parent();
-				while (cleanupFns.length) cleanupFns.pop()();
+				disposed = true;
+				stopParent();
+				cleanupRun();
 			};
 		}
 	).memo();
