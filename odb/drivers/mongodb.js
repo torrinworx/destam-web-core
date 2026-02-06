@@ -37,8 +37,6 @@ export default async function mongodbDriver({
 	clientOptions = { serverSelectionTimeoutMS: 1000 },
 	collectionPrefix = '',
 
-	// change stream options
-	enableWatch = true,
 	fullDocument = 'updateLookup',
 } = {}) {
 	let mongoServer = null;
@@ -152,8 +150,37 @@ export default async function mongodbDriver({
 			return await cursor.toArray();
 		},
 
+		// --- raw escape hatches (used by odb.driver.* proxy if you want) ---
+		async rawFindOne({ collection, filter, options } = {}) {
+			const col = await getCol(collection);
+
+			const doc = await col.findOne(
+				filter || {},
+				{
+					...options,
+					projection: options?.projection ?? { _id: 0, key: 1, state_tree: 1, index: 1 },
+				}
+			);
+
+			return doc || false;
+		},
+
+		async rawFindMany({ collection, filter, options } = {}) {
+			const col = await getCol(collection);
+
+			const cursor = col.find(filter || {}, {
+				...options,
+				projection: options?.projection ?? { _id: 0, key: 1, state_tree: 1, index: 1 },
+			});
+
+			if (options?.sort) cursor.sort(options.sort);
+			if (typeof options?.skip === 'number' && options.skip > 0) cursor.skip(options.skip);
+			if (typeof options?.limit === 'number' && options.limit > 0 && options.limit !== Infinity) cursor.limit(options.limit);
+
+			return await cursor.toArray();
+		},
+
 		async watch({ collection, key, onRecord }) {
-			if (!enableWatch) return () => { };
 			if (typeof onRecord !== 'function') throw new Error('mongodbDriver.watch: onRecord must be a function');
 
 			const col = await getCol(collection);
@@ -234,5 +261,8 @@ export default async function mongodbDriver({
 		},
 	};
 
+	api.client = client;
+	api.database = db;
+
 	return api;
-}
+};
