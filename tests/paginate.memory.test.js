@@ -1,10 +1,9 @@
-// backend/paginate.memory.test.js
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { OObject, OArray, Observer } from 'destam';
 
-import paginate from './modules/paginate.js';
+import paginate from '../common/paginate.js';
 import createODB from '../odb/index.js';
 import memoryDriver from '../odb/drivers/memory.js';
 

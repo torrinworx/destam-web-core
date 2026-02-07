@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { OObject, OArray, Observer } from 'destam';
-import paginate from './modules/paginate.js'; // adjust path if needed
+import paginate from '../common/paginate.js'; // adjust path if needed
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
