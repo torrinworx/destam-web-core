@@ -288,7 +288,3 @@ doc.$odb.reload()
 doc.$odb.dispose()
 doc.$odb.remove()
 ```
-
----
-
-If you tell me your intended audience (library consumers vs internal team) and whether you want this formatted as a `README.md` with sections like “Why ODB”, “When not to use ODB”, “Driver setup”, I can rewrite it to match that style exactly.
