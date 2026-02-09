@@ -1,30 +1,5 @@
 import { Delete } from 'destam';
 
-/**
- * State-tree relay bridge (commit/delta based).
- *
- * @param {Object} opts
- * @param {Observer} opts.a - root observer for tree A (usually someObservable.observer)
- * @param {Observer} opts.b - root observer for tree B
- *
- * @param {boolean} [opts.aToB=true] - forward commits A -> B
- * @param {boolean} [opts.bToA=false] - forward commits B -> A
- *
- * @param {number} [opts.throttle=0] - ms; if > 0 uses .throttle(throttle) before watchCommit
- *
- * @param {(delta:any)=>boolean} [opts.allowAtoB] - filter which deltas from A are forwarded to B
- * @param {(delta:any)=>boolean} [opts.allowBtoA] - filter which deltas from B are forwarded to A
- *
- * @param {(delta:any, dir:'AtoB'|'BtoA')=>any|null|false} [opts.transform]
- *   - return:
- *     - a (possibly modified) delta to forward
- *     - null/false to drop the delta
- *
- * @param {null|(()=>Promise<void>|void)} [opts.flushA=null] - called after writing into A
- * @param {null|(()=>Promise<void>|void)} [opts.flushB=null] - called after writing into B
- *
- * @returns {() => void} cleanup
- */
 const Obridge = ({
 	a,
 	b,
