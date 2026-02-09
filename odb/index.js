@@ -54,8 +54,9 @@ const makeIndex = (state) => {
 
 	index.id = keyFromState(state);
 
-	if (index.createdAt == null && state.createdAt != null) index.createdAt = state.createdAt;
-	if (index.modifiedAt == null && state.modifiedAt != null) index.modifiedAt = state.modifiedAt;
+	// TODO, somehow we need to serialize createdAt and modifiedAt so that 
+	// createdAt is stored. Then modifiedAt is stored but also updated every modification.
+	// might look into extending clone.js?
 
 	return index;
 };
