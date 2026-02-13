@@ -171,7 +171,7 @@ const topoSort = (modulesMap, disabledNames) => {
 	}
 
 	return sorted;
-}
+};
 
 /**
  * Instantiate modules in topological order.  
