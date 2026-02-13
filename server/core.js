@@ -11,7 +11,7 @@ import http from './servers/http.js';
 import { parse } from '../common/clone.js';
 import createSchedule from './schedule.js';
 
-const core = async ({ server = null, root, modulesDir, db, table, env, port }) => {
+const core = async ({ server = null, root, modulesDir, db, table, env, port, moduleConfig }) => {
 	server = server ? server() : http();
 
 	if (env === 'production') server.production({ root });
@@ -49,6 +49,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port }) =
 
 	const modules = await Modules(modulesDir, {
 		...modProps,
+		moduleConfig,
 		registerSchedule: (name, scheduleDef, ctx = {}) => {
 			if (typeof name !== 'string' || !name) throw new Error('registerSchedule(name, ...) name must be a non-empty string');
 			return scheduler.registerSchedule(name, scheduleDef, {

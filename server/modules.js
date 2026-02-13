@@ -2,6 +2,21 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { promises as fs } from "fs";
 
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+const deepMerge = (base, override) => {
+	if (override === undefined) return isPlainObject(base) ? { ...base } : base;
+	if (!isPlainObject(base) || !isPlainObject(override)) return override;
+
+	const out = { ...base };
+	for (const [k, v] of Object.entries(override)) {
+		if (v === undefined) continue;
+		const bv = base[k];
+		out[k] = (isPlainObject(bv) && isPlainObject(v)) ? deepMerge(bv, v) : v;
+	}
+	return out;
+};
+
 /**
  * Recursively find all files within the given directories.
  * Returns an array of objects: [{ directory, filePath }, ...]
@@ -39,18 +54,29 @@ const findFiles = async (directories) => {
  *    - deps (named export)
  *    - factory (default export)
  */
-const mapModules = async (directories) => {
+const mapModules = async (directories, disabledNames) => {
 	const moduleFiles = await findFiles(directories);
-	let discoveredCount = 0;
+	let processedCount = 0;
 	const modulesMap = {};
+
+	const disabled = disabledNames instanceof Set ? disabledNames : new Set();
 
 	await Promise.all(
 		moduleFiles.map(async ({ directory, filePath }) => {
 			try {
-				const mod = await import(filePath);
 				const moduleRoot = directories.find(dir => filePath.startsWith(dir));
+				if (!moduleRoot) throw new Error(`Unable to resolve module root for: ${filePath}`);
 				const relativePath = path.relative(moduleRoot, filePath);
 				const moduleName = relativePath.replace(/\\/g, "/").replace(/\.js$/, "");
+
+				// Allow disabling modules by name (prevents import/registration entirely)
+				if (disabled.has(moduleName)) {
+					processedCount++;
+					process.stdout.write(`\rProcessed ${processedCount}/${moduleFiles.length} module files...`);
+					return;
+				}
+
+				const mod = await import(filePath);
 
 				// TODO: if module is a web-core default module and user specifies their own
 				// override the webcore one with the user defined one to allow for customization.
@@ -60,16 +86,18 @@ const mapModules = async (directories) => {
 
 				const deps = Array.isArray(mod.deps) ? mod.deps : [];
 				const factory = typeof mod.default === "function" ? mod.default : null;
+				const defaults = isPlainObject(mod.defaults) ? mod.defaults : null;
 
 				modulesMap[moduleName] = {
 					directory,
 					filePath,
 					deps,
 					factory,
+					defaults,
 				};
 
-				discoveredCount++;
-				process.stdout.write(`\rDiscovered ${discoveredCount}/${moduleFiles.length} modules...`);
+				processedCount++;
+				process.stdout.write(`\rProcessed ${processedCount}/${moduleFiles.length} module files...`);
 			} catch (err) {
 				console.error(`Failed to discover module at ${filePath}:`, err);
 			}
@@ -85,8 +113,9 @@ const mapModules = async (directories) => {
  * is a moduleName in modulesMap. Throws if a cycle or
  * unresolved dependency is found.
  */
-const topoSort = (modulesMap) => {
+const topoSort = (modulesMap, disabledNames) => {
 	const allNames = Object.keys(modulesMap);
+	const disabled = disabledNames instanceof Set ? disabledNames : new Set();
 
 	// adjacencyList: for A depends on B, we add an edge B->A
 	const adjacencyList = {};
@@ -103,6 +132,9 @@ const topoSort = (modulesMap) => {
 		const { deps } = modulesMap[name];
 		for (const d of deps) {
 			if (!modulesMap[d]) {
+				if (disabled.has(d)) {
+					throw new Error(`Module "${name}" depends on disabled module "${d}".`);
+				}
 				throw new Error(`Module "${name}" depends on "${d}", but "${d}" was not found.`);
 			}
 			adjacencyList[d].push(name);
@@ -149,12 +181,20 @@ const topoSort = (modulesMap) => {
  *    - Also pass "props" (global extra data) for convenience.
  */
 const instantiateModules = async (modulesMap, sortedNames, props) => {
+	const moduleConfig = isPlainObject(props?.moduleConfig) ? props.moduleConfig : {};
+	const baseProps = isPlainObject(props) ? { ...props } : {};
+	delete baseProps.moduleConfig;
+
 	const instantiated = {};
 	const total = sortedNames.length;
 	let loadedCount = 0;
 
 	for (const name of sortedNames) {
-		const { deps, factory } = modulesMap[name];
+		if (moduleConfig[name] === false) {
+			// Defensive: discovery should have skipped, but keep consistent semantics.
+			continue;
+		}
+		const { deps, factory, defaults } = modulesMap[name];
 		if (!factory) {
 			console.warn(
 				`\nNo valid default export function for module "${name}". Skipping instantiation.`
@@ -162,9 +202,15 @@ const instantiateModules = async (modulesMap, sortedNames, props) => {
 			continue;
 		}
 
+		const effectiveConfig = deepMerge(defaults || {}, moduleConfig[name]);
+
 		// Build the injection object
 		const injection = {
-			...props
+			...baseProps,
+			webCore: {
+				name,
+				config: effectiveConfig,
+			},
 		};
 
 		for (const depName of deps) {
@@ -210,8 +256,15 @@ const Modules = async (dirs, props = {}) => {
 		path.resolve(__dirname, "modules"),
 	];
 
-	const modulesMap = await mapModules(directories);
-	const sortedNames = topoSort(modulesMap);
+	const moduleConfig = isPlainObject(props?.moduleConfig) ? props.moduleConfig : {};
+	const disabledNames = new Set(
+		Object.entries(moduleConfig)
+			.filter(([, v]) => v === false)
+			.map(([k]) => k)
+	);
+
+	const modulesMap = await mapModules(directories, disabledNames);
+	const sortedNames = topoSort(modulesMap, disabledNames);
 	return await instantiateModules(modulesMap, sortedNames, props);
 };
 
