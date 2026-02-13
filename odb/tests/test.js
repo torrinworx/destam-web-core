@@ -150,6 +150,7 @@ export const runODBDriverTests = ({
 				: driver;
 
 		try {
+			
 			db1 = await createODB({ driver: sharedDriver, throttleMs });
 			db2 = await createODB({ driver: sharedDriver, throttleMs });
 
