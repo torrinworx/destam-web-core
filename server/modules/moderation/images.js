@@ -1,0 +1,108 @@
+const url = "https://api.openai.com/v1/moderations";
+
+/**
+ * Moderates an image (by URL or base64 data URL) for a general business/public marketplace vibe.
+ *
+ * @param {Object} params
+ * @param {string} [params.imageUrl] - Publicly accessible image URL (https://...)
+ * @param {string} [params.imageBase64] - Base64 string WITHOUT the data: prefix (optional)
+ * @param {string} [params.mimeType] - e.g. "image/jpeg" or "image/png" (required if using imageBase64)
+ *
+ * Returns: { ok: boolean, flagged: boolean, categories, scores, reason, raw }
+ */
+const images = async ({ imageUrl, imageBase64, mimeType } = {}) => {
+	// sanity
+	if (!imageUrl && !imageBase64) {
+		return { ok: false, flagged: true, reason: "Provide imageUrl or imageBase64." };
+	}
+	if (imageBase64 && !mimeType) {
+		return { ok: false, flagged: true, reason: "mimeType is required when using imageBase64." };
+	}
+
+	// build the moderation input
+	const imageInputUrl = imageUrl
+		? imageUrl
+		: `data:${mimeType};base64,${imageBase64}`;
+
+	let resp;
+	try {
+		resp = await fetch(url, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+			},
+			body: JSON.stringify({
+				model: "omni-moderation-latest",
+				input: [
+					{
+						type: "image_url",
+						image_url: { url: imageInputUrl },
+					},
+				],
+			}),
+		});
+	} catch (e) {
+		return { ok: false, flagged: true, reason: `Moderation request failed: ${e.message}` };
+	}
+
+	if (!resp.ok) {
+		const errText = await resp.text().catch(() => "");
+		return {
+			ok: false,
+			flagged: true,
+			reason: `Moderation HTTP ${resp.status}${errText ? `: ${errText}` : ""}`,
+		};
+	}
+
+	const data = await resp.json();
+	const result = data?.results?.[0];
+	if (!result) {
+		return { ok: false, flagged: true, reason: "Unexpected moderation response.", raw: data };
+	}
+
+	const { flagged, categories = {}, category_scores: scores = {} } = result;
+
+	// You can keep your same thresholds, but note: image support may vary by category [3]
+	const strictThresholds = {
+		"harassment/threatening": 0.20,
+		"hate/threatening": 0.10,
+		"self-harm/instructions": 0.10,
+		"sexual/minors": 0.01,
+		"illicit/violent": 0.20,
+		"violence/graphic": 0.30,
+	};
+
+	if (flagged) {
+		return {
+			ok: false,
+			flagged: true,
+			categories,
+			scores,
+			reason: "Model flagged content.",
+			raw: data,
+		};
+	}
+
+	for (const [cat, threshold] of Object.entries(strictThresholds)) {
+		const score = typeof scores[cat] === "number" ? scores[cat] : 0;
+		if (score >= threshold) {
+			return {
+				ok: false,
+				flagged: true,
+				categories,
+				scores,
+				reason: `Score threshold hit for ${cat} (${score.toFixed(3)} >= ${threshold}).`,
+				raw: data,
+			};
+		}
+	}
+
+	return { ok: true, flagged: false, categories, scores, reason: "Passed.", raw: data };
+};
+
+export default () => {
+	return {
+		int: images,
+	};
+};
