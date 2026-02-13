@@ -202,7 +202,14 @@ const instantiateModules = async (modulesMap, sortedNames, props) => {
 			continue;
 		}
 
-		const effectiveConfig = deepMerge(defaults || {}, moduleConfig[name]);
+		const userCfg = moduleConfig[name];
+		if (userCfg !== undefined && !isPlainObject(userCfg)) {
+			throw new Error(
+				`\nInvalid moduleConfig for "${name}": expected a plain object, undefined, or false (to disable).`
+			);
+		}
+
+		const effectiveConfig = deepMerge(defaults || {}, userCfg || {});
 
 		// Build the injection object
 		const injection = {

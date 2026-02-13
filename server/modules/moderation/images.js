@@ -1,4 +1,24 @@
-const url = "https://api.openai.com/v1/moderations";
+export const defaults = {
+	url: 'https://api.openai.com/v1/moderations',
+	model: 'omni-moderation-latest',
+	apiKeyEnv: 'OPENAI_API_KEY',
+
+	// Block if any category score meets/exceeds its threshold.
+	thresholds: {
+		'harassment/threatening': 0.20,
+		'hate/threatening': 0.10,
+		'self-harm/instructions': 0.10,
+		'sexual/minors': 0.01,
+		'illicit/violent': 0.20,
+		'violence/graphic': 0.30,
+	},
+};
+
+const isPlainObject = v => {
+	if (!v || typeof v !== 'object') return false;
+	if (Array.isArray(v)) return false;
+	return Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null;
+};
 
 /**
  * Moderates an image (by URL or base64 data URL) for a general business/public marketplace vibe.
@@ -10,13 +30,17 @@ const url = "https://api.openai.com/v1/moderations";
  *
  * Returns: { ok: boolean, flagged: boolean, categories, scores, reason, raw }
  */
-const images = async ({ imageUrl, imageBase64, mimeType } = {}) => {
+const images = async ({ imageUrl, imageBase64, mimeType } = {}, { url, model, thresholds, apiKey, apiKeyEnv }) => {
 	// sanity
 	if (!imageUrl && !imageBase64) {
-		return { ok: false, flagged: true, reason: "Provide imageUrl or imageBase64." };
+		return { ok: false, flagged: true, reason: 'Provide imageUrl or imageBase64.' };
 	}
 	if (imageBase64 && !mimeType) {
-		return { ok: false, flagged: true, reason: "mimeType is required when using imageBase64." };
+		return { ok: false, flagged: true, reason: 'mimeType is required when using imageBase64.' };
+	}
+
+	if (!apiKey) {
+		return { ok: false, flagged: true, reason: `Missing API key env var: ${apiKeyEnv}` };
 	}
 
 	// build the moderation input
@@ -27,16 +51,16 @@ const images = async ({ imageUrl, imageBase64, mimeType } = {}) => {
 	let resp;
 	try {
 		resp = await fetch(url, {
-			method: "POST",
+			method: 'POST',
 			headers: {
-				"Content-Type": "application/json",
-				Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${apiKey}`,
 			},
 			body: JSON.stringify({
-				model: "omni-moderation-latest",
+				model,
 				input: [
 					{
-						type: "image_url",
+						type: 'image_url',
 						image_url: { url: imageInputUrl },
 					},
 				],
@@ -47,31 +71,21 @@ const images = async ({ imageUrl, imageBase64, mimeType } = {}) => {
 	}
 
 	if (!resp.ok) {
-		const errText = await resp.text().catch(() => "");
+		const errText = await resp.text().catch(() => '');
 		return {
 			ok: false,
 			flagged: true,
-			reason: `Moderation HTTP ${resp.status}${errText ? `: ${errText}` : ""}`,
+			reason: `Moderation HTTP ${resp.status}${errText ? `: ${errText}` : ''}`,
 		};
 	}
 
 	const data = await resp.json();
 	const result = data?.results?.[0];
 	if (!result) {
-		return { ok: false, flagged: true, reason: "Unexpected moderation response.", raw: data };
+		return { ok: false, flagged: true, reason: 'Unexpected moderation response.', raw: data };
 	}
 
 	const { flagged, categories = {}, category_scores: scores = {} } = result;
-
-	// You can keep your same thresholds, but note: image support may vary by category [3]
-	const strictThresholds = {
-		"harassment/threatening": 0.20,
-		"hate/threatening": 0.10,
-		"self-harm/instructions": 0.10,
-		"sexual/minors": 0.01,
-		"illicit/violent": 0.20,
-		"violence/graphic": 0.30,
-	};
 
 	if (flagged) {
 		return {
@@ -79,13 +93,14 @@ const images = async ({ imageUrl, imageBase64, mimeType } = {}) => {
 			flagged: true,
 			categories,
 			scores,
-			reason: "Model flagged content.",
+			reason: 'Model flagged content.',
 			raw: data,
 		};
 	}
 
-	for (const [cat, threshold] of Object.entries(strictThresholds)) {
-		const score = typeof scores[cat] === "number" ? scores[cat] : 0;
+	for (const [cat, threshold] of Object.entries(thresholds)) {
+		if (typeof threshold !== 'number' || !Number.isFinite(threshold)) continue;
+		const score = typeof scores[cat] === 'number' ? scores[cat] : 0;
 		if (score >= threshold) {
 			return {
 				ok: false,
@@ -98,11 +113,41 @@ const images = async ({ imageUrl, imageBase64, mimeType } = {}) => {
 		}
 	}
 
-	return { ok: true, flagged: false, categories, scores, reason: "Passed.", raw: data };
+	return { ok: true, flagged: false, categories, scores, reason: 'Passed.', raw: data };
 };
 
-export default () => {
+const makeConfig = (cfg) => {
+	const { url, model, apiKeyEnv, thresholds } = cfg;
+	if (typeof url !== 'string' || !url) {
+		throw new Error('Invalid moderation config: url must be a non-empty string.');
+	}
+	if (typeof model !== 'string' || !model) {
+		throw new Error('Invalid moderation config: model must be a non-empty string.');
+	}
+	if (typeof apiKeyEnv !== 'string' || !apiKeyEnv) {
+		throw new Error('Invalid moderation config: apiKeyEnv must be a non-empty string.');
+	}
+	if (!isPlainObject(thresholds)) {
+		throw new Error('Invalid moderation config: thresholds must be an object.');
+	}
+
 	return {
-		int: images,
+		url,
+		model,
+		apiKeyEnv,
+		thresholds,
+		apiKey: process.env?.[apiKeyEnv] || null,
+	};
+};
+
+export default ({ webCore }) => {
+	let cfg;
+	try {
+		cfg = makeConfig(webCore.config);
+	} catch (e) {
+		throw new Error(`moderation/images: ${e.message}`);
+	}
+	return {
+		int: (params) => images(params, cfg),
 	};
 };
