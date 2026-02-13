@@ -5,21 +5,16 @@ export const deps = ['moderation/strings'];
 export const defaults = {
 	name: { maxLength: 40 },
 	description: { maxLength: 2000 },
-	tags: true,    // true = enabled, false = disabled
-	images: true,  // true = enabled, false = disabled
+	tags: true,
+	images: true,
 };
 
 const coerceImages = (input) => {
 	if (input == null) return [];
-
-	// Allow single string
 	if (typeof input === 'string') return [input];
-
-	// Allow arrays + OArray + iterables
 	if (Array.isArray(input)) return input;
 	if (typeof input?.[Symbol.iterator] === 'function') return [...input];
-
-	return null; // invalid
+	return null;
 };
 
 export default ({ strings, webCore }) => {
