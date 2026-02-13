@@ -206,7 +206,7 @@ const __dirname = path.dirname(__filename);
 
 const Modules = async (dirs, props = {}) => {
 	const directories = [
-		...(Array.isArray(dirs) ? dirs : [dirs]),
+		...(Array.isArray(dirs) ? dirs : (dirs != null ? [dirs] : [])),
 		path.resolve(__dirname, "modules"),
 	];
 

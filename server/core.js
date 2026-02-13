@@ -1,4 +1,3 @@
-// server/core.js
 import { WebSocketServer } from 'ws';
 import { OObject } from 'destam';
 
