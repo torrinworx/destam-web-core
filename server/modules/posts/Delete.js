@@ -26,7 +26,7 @@ export default ({ webCore }) => {
 
 			if (!post) return { error: 'Post not found.' };
 
-			const userId = user.observer.id.toHex.();
+			const userId = user.observer.id.toHex();
 			if (!userId) return { error: 'Unauthorized' };
 
 			if (post.user !== userId) {
