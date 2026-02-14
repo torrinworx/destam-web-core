@@ -1,6 +1,8 @@
 import { CronExpressionParser } from 'cron-parser';
 import { DateTime } from 'luxon';
 
+const MAX_INTERVAL = 2 ** 31 - 1; // Node timers cap
+
 export const createSchedule = ({ onError = null } = {}) => {
 	const jobs = new Set();
 	const timers = new Set();
@@ -36,12 +38,44 @@ export const createSchedule = ({ onError = null } = {}) => {
 	const startEvery = (job) => {
 		if (job.runOnStart) Promise.resolve().then(() => runJob(job));
 
-		const t = setInterval(() => {
-			Promise.resolve().then(() => runJob(job));
-		}, job.every);
+		if (job.every <= MAX_INTERVAL) {
+			const t = setInterval(() => {
+				Promise.resolve().then(() => runJob(job));
+			}, job.every);
+			timers.add(t);
+			return () => { clearInterval(t); timers.delete(t); };
+		}
 
-		timers.add(t);
-		return () => { clearInterval(t); timers.delete(t); };
+		let stopped = false;
+		let currentTimeout = null;
+		let remaining = job.every;
+
+		const scheduleChunk = () => {
+			if (stopped) return;
+			const delay = Math.min(remaining, MAX_INTERVAL);
+			if (delay <= 0) return;
+			currentTimeout = setTimeout(async () => {
+				timers.delete(currentTimeout);
+				if (stopped) return;
+				remaining -= delay;
+				if (remaining <= 0) {
+					remaining = job.every;
+					await runJob(job);
+				}
+				scheduleChunk();
+			}, delay);
+			timers.add(currentTimeout);
+		};
+
+		scheduleChunk();
+
+		return () => {
+			stopped = true;
+			if (currentTimeout) {
+				clearTimeout(currentTimeout);
+				timers.delete(currentTimeout);
+			}
+		};
 	};
 
 	const startCron = (job) => {

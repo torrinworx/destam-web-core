@@ -1,1 +1,3 @@
-// TODO
+export default () => ({
+	// placeholder scheduler module
+});
