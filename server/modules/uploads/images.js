@@ -1,80 +1,111 @@
 import multer from 'multer';
 import cookieParser from 'cookie-parser';
 
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const formatMessage = (message, detail) => {
+	if (typeof message === 'function') return message(detail);
+	if (!message) return detail ?? '';
+	if (detail == null || detail === '') return message;
+	return `${message}: ${detail}`;
+};
+
 export const deps = ['files/Create', 'moderation/images'];
 
-const ALLOWED_MIMES = new Set([
-	'image/jpeg',
-	'image/jpg',
-	'image/png',
-	'image/webp',
-]);
+export const defaults = {
+	route: '/api/upload',
+	fieldName: 'file',
+	maxBytes: 10 * 1024 * 1024, // 10MB
+	allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
+	cookieName: 'webcore',
+	sessionCollection: 'sessions',
+	messages: {
+		noFile: 'No file',
+		unsupportedMime: 'Unsupported file type',
+		emptyFile: 'Empty file',
+		missingToken: 'Missing session token',
+		invalidSession: 'Invalid session',
+		sessionDisabled: 'Session disabled',
+		sessionExpired: 'Session expired',
+		noUser: 'Session has no user',
+		moderationFailed: 'Image failed moderation',
+		moderationReason: 'Moderation failed',
+		internalError: 'Internal error',
+	},
+};
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10MB
-
-export default ({ serverProps, Create: addFile, images: modImg, odb }) => {
+export default ({ serverProps, Create: addFile, images: modImg, odb, webCore }) => {
 	const app = serverProps.app;
 	app.use(cookieParser());
 
+	const cfg = webCore?.config ?? {};
+
+	const route = typeof cfg.route === 'string' && cfg.route ? cfg.route : defaults.route;
+	const fieldName = typeof cfg.fieldName === 'string' && cfg.fieldName ? cfg.fieldName : defaults.fieldName;
+	const userMaxBytes = Number.isFinite(cfg.maxBytes) ? Math.floor(cfg.maxBytes) : null;
+	const maxBytes = userMaxBytes && userMaxBytes > 0 ? userMaxBytes : defaults.maxBytes;
+	const allowedMimeTypes = Array.isArray(cfg.allowedMimeTypes) ? cfg.allowedMimeTypes : defaults.allowedMimeTypes;
+	const allowedMimes = new Set(allowedMimeTypes);
+	const cookieName = typeof cfg.cookieName === 'string' && cfg.cookieName ? cfg.cookieName : defaults.cookieName;
+	const sessionCollection = typeof cfg.sessionCollection === 'string' && cfg.sessionCollection ? cfg.sessionCollection : defaults.sessionCollection;
+	const messageOverrides = isPlainObject(cfg.messages) ? { ...defaults.messages, ...cfg.messages } : defaults.messages;
+
 	const upload = multer({
 		storage: multer.memoryStorage(),
-		limits: { fileSize: MAX_BYTES },
+		limits: { fileSize: maxBytes },
 	});
 
-	app.post('/api/upload', upload.single('file'), async (req, res) => {
+	app.post(route, upload.single(fieldName), async (req, res) => {
 		try {
-			if (!req.file) return res.status(400).json({ ok: false, error: 'No file' });
+			if (!req.file) return res.status(400).json({ ok: false, error: messageOverrides.noFile });
 
 			// Basic file checks early
 			const { mimetype, size, buffer, originalname } = req.file;
 
-			if (!ALLOWED_MIMES.has(mimetype)) {
+			if (!allowedMimes.has(mimetype)) {
 				return res.status(400).json({
 					ok: false,
-					error: `Unsupported file type: ${mimetype}`,
+					error: formatMessage(messageOverrides.unsupportedMime, mimetype),
 				});
 			}
 
 			if (!buffer || !buffer.length) {
-				return res.status(400).json({ ok: false, error: 'Empty file' });
+				return res.status(400).json({ ok: false, error: messageOverrides.emptyFile });
 			}
 
 			// Auth/session checks
-			const token = req.cookies?.webcore;
-			if (!token) return res.status(401).json({ ok: false, error: 'Missing session token' });
+			const token = req.cookies?.[cookieName];
+			if (!token) return res.status(401).json({ ok: false, error: messageOverrides.missingToken });
 
-			const session = await odb.findOne({ collection: 'sessions', query: { uuid: token } });
-			if (!session) return res.status(401).json({ ok: false, error: 'Invalid session' });
+			const session = await odb.findOne({ collection: sessionCollection, query: { uuid: token } });
+			if (!session) return res.status(401).json({ ok: false, error: messageOverrides.invalidSession });
 
 			const now = Date.now();
 			if (!session.status) {
-				return res.status(401).json({ ok: false, error: 'Session disabled' });
+				return res.status(401).json({ ok: false, error: messageOverrides.sessionDisabled });
 			}
 			if (typeof session.expires !== 'number' || session.expires <= now) {
-				return res.status(401).json({ ok: false, error: 'Session expired' });
+				return res.status(401).json({ ok: false, error: messageOverrides.sessionExpired });
 			}
 
-			// New shape: session.user (but allow legacy session.query.user during migration)
-			const user = session.user ?? session.query?.user ?? null;
-			if (!user) return res.status(401).json({ ok: false, error: 'Session has no user' });
+			const user = session.user;
+			if (!user) return res.status(401).json({ ok: false, error: messageOverrides.noUser });
 
-			// ---- MODERATION (before persistence) ----
 			const base64 = buffer.toString('base64');
 
+			const normalizedMime = mimetype === 'image/jpg' ? 'image/jpeg' : mimetype;
 			const mod = await modImg({
 				imageBase64: base64,
-				mimeType: mimetype === 'image/jpg' ? 'image/jpeg' : mimetype,
+				mimeType: normalizedMime,
 			});
 
 			if (!mod?.ok) {
 				return res.status(400).json({
 					ok: false,
-					error: 'Image failed moderation',
-					reason: mod?.reason || 'Moderation failed',
+					error: formatMessage(messageOverrides.moderationFailed, mod?.reason || messageOverrides.moderationReason),
+					reason: mod?.reason || messageOverrides.moderationReason,
 				});
 			}
 
-			// ---- Only now persist the file ----
 			const fileId = await addFile({
 				user,
 				file: req.file,
@@ -95,7 +126,7 @@ export default ({ serverProps, Create: addFile, images: modImg, odb }) => {
 			return res.json(fileId);
 		} catch (err) {
 			console.error('upload error:', err);
-			return res.status(500).json({ ok: false, error: 'Internal error' });
+			return res.status(500).json({ ok: false, error: messageOverrides.internalError });
 		}
 	});
 };
