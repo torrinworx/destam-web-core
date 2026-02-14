@@ -8,17 +8,6 @@ const ensureDir = async dir => {
 	await fs.mkdir(dir, { recursive: true });
 };
 
-const toHexUuid = v => {
-	// keep behavior close to old code: accept UUID-ish inputs
-	if (typeof v === 'string') {
-		const s = v.trim();
-		if (!s) return null;
-		// if someone passed raw hex without '#', make it a UUID string
-		return UUID(s[0] === '#' ? s : `#${s}`).toHex();
-	}
-	return UUID(v).toHex();
-};
-
 export default ({ odb }) => {
 	const s3 = new S3Client({
 		region: process.env.SPACES_REGION,
@@ -30,7 +19,7 @@ export default ({ odb }) => {
 	});
 
 	return {
-		async int({ userId, user: providedUser, file, originalName, mimeType, meta }, { user }) {
+		async int({ userId, file, originalName, mimeType, meta }) {
 			const isProd = process.env.NODE_ENV === 'production';
 
 			let buffer;
@@ -58,9 +47,6 @@ export default ({ odb }) => {
 			if (!buffer || typeof size !== 'number') {
 				throw new Error('No file data provided (expected Buffer/Uint8Array or multer file object)');
 			}
-
-			const userHex = toHexUuid(userId ?? providedUser ?? user);
-			if (!userHex) throw new Error('Missing userId');
 
 			const fileUUID = UUID();
 			const fileId = fileUUID.toHex();
@@ -116,14 +102,12 @@ export default ({ odb }) => {
 				query: { fileId },
 				value: OObject({
 					fileId,
-					userId: userHex,
+					userId,
 					uploadedAt,
 					uploadedAtIso: new Date(uploadedAt).toISOString(),
-
 					originalName: inferredOriginal || null,
 					mimeType: inferredMime || null,
 					size,
-
 					storage,
 					meta,
 				}),
