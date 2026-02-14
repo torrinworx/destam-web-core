@@ -7,16 +7,8 @@ Meant to just be a development shim, not meant for production use.
 import path from "path";
 import express from "express";
 
-const isPlainObject = (value) => {
-	if (!value || typeof value !== "object") return false;
-	if (Array.isArray(value)) return false;
-	const proto = Object.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
-};
-
 export const defaults = {
 	route: "/files",
-	filesPathEnv: "FILES_PATH",
 	filesPath: null,
 	allowInProduction: false,
 	staticOptions: {
@@ -39,28 +31,21 @@ const ensureRoute = (value) => {
 };
 
 export default ({ serverProps, webCore }) => {
-	const cfg = isPlainObject(webCore?.config) ? webCore.config : {};
+	const cfg = webCore?.config || {};
 	const route = ensureRoute(cfg.route ?? defaults.route);
-	const filesPathEnv = typeof cfg.filesPathEnv === "string" && cfg.filesPathEnv ? cfg.filesPathEnv : defaults.filesPathEnv;
-	const filesPath = typeof cfg.filesPath === "string" && cfg.filesPath ? cfg.filesPath : process.env?.[filesPathEnv];
+	const filesPath = typeof cfg.filesPath === "string" && cfg.filesPath ? cfg.filesPath : defaults.filesPath;
 	const allowInProduction = cfg.allowInProduction === true;
-	const staticOptions = isPlainObject(cfg.staticOptions)
-		? { ...defaults.staticOptions, ...cfg.staticOptions }
-		: { ...defaults.staticOptions };
+	const staticOptions = {
+		...defaults.staticOptions,
+		...(cfg.staticOptions || {}),
+	};
 
-	const notFoundCfg = isPlainObject(cfg.notFound)
-		? {
-			status: defaults.notFound.status,
-			payload: { ...defaults.notFound.payload },
-			...cfg.notFound,
-		}
-		: { ...defaults.notFound };
-
-	const notFoundPayload = isPlainObject(notFoundCfg.payload)
-		? { ...defaults.notFound.payload, ...notFoundCfg.payload }
-		: { ...defaults.notFound.payload };
-	const notFoundStatus = typeof notFoundCfg.status === "number" && Number.isFinite(notFoundCfg.status)
-		? Math.max(100, Math.min(599, Math.floor(notFoundCfg.status)))
+	const notFoundPayload = {
+		...defaults.notFound.payload,
+		...(cfg.notFound?.payload || {}),
+	};
+	const notFoundStatus = typeof cfg.notFound?.status === "number" && Number.isFinite(cfg.notFound.status)
+		? Math.max(100, Math.min(599, Math.floor(cfg.notFound.status)))
 		: defaults.notFound.status;
 
 	if (!allowInProduction && process.env.NODE_ENV === "production") return;
