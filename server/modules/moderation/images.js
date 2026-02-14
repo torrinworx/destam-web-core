@@ -30,7 +30,7 @@ const isPlainObject = v => {
  *
  * Returns: { ok: boolean, flagged: boolean, categories, scores, reason, raw }
  */
-const images = async ({ imageUrl, imageBase64, mimeType } = {}, { url, model, thresholds, apiKey, apiKeyEnv }) => {
+const images = async ({ imageUrl, imageBase64, mimeType }, { url, model, thresholds, apiKey, apiKeyEnv }) => {
 	// sanity
 	if (!imageUrl && !imageBase64) {
 		return { ok: false, flagged: true, reason: 'Provide imageUrl or imageBase64.' };
