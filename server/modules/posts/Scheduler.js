@@ -27,27 +27,22 @@ export default ({ webCore }) => {
 	// Allow disabling schedule without disabling the whole module.
 	if (cfg.schedule === false) return {};
 
-	// The module system has already merged defaults with user config through deepMerge()
-	// cfg now contains the final merged configuration
-	const scheduleCfg = cfg.schedule || {};
-
-	// Use the merged config directly - all validation already done by module system
 	const batchSize = Number.isFinite(cfg.batchSize) && cfg.batchSize > 0
 		? Math.floor(cfg.batchSize)
 		: defaults.batchSize;
 
-	const tz = typeof scheduleCfg.tz === 'string' && scheduleCfg.tz.trim()
-		? scheduleCfg.tz.trim()
+	const tz = typeof cfg.schedule?.tz === 'string' && cfg.schedule.tz.trim()
+		? cfg.schedule.tz.trim()
 		: defaults.schedule.tz;
 
-	const runOnStart = scheduleCfg.runOnStart === true;
-	const cron = typeof scheduleCfg.cron === 'string' && scheduleCfg.cron.trim()
-		? scheduleCfg.cron.trim()
+	const runOnStart = cfg.schedule?.runOnStart === true;
+	const cron = typeof cfg.schedule?.cron === 'string' && cfg.schedule.cron.trim()
+		? cfg.schedule.cron.trim()
 		: null;
 
 	const every = cron
 		? null
-		: normalizeEvery(scheduleCfg.every, defaults.schedule.every);
+		: normalizeEvery(cfg.schedule?.every, defaults.schedule.every);
 
 	const findExpiredBatch = async (odb, now) => {
 		// MongoDB driver supports dot paths + operators; in-memory and IndexedDB drivers do not.
