@@ -70,17 +70,23 @@ export default ({ odb, webCore }) => ({
 
 			if (!userToProfileEnabled && !profileToUserEnabled) return;
 
-			state.profile = ensureOObject(state.profile);
+			const prepareProfile = (value) => {
+				const next = ensureOObject(value);
+
+				if (!('id' in next)) next.id = null;
+				if (!('name' in next)) next.name = '';
+				if (!('role' in next)) next.role = null;
+				if (!('image' in next)) next.image = null;
+
+				next.name = normalizeName(next.name);
+				next.role = normalizeRole(next.role);
+				next.image = normalizeImage(next.image);
+
+				return next;
+			};
+
+			state.profile = prepareProfile(state.profile);
 			const profile = state.profile;
-
-			if (!('id' in profile)) profile.id = null;
-			if (!('name' in profile)) profile.name = '';
-			if (!('role' in profile)) profile.role = null;
-			if (!('image' in profile)) profile.image = null;
-
-			profile.name = normalizeName(profile.name);
-			profile.role = normalizeRole(profile.role);
-			profile.image = normalizeImage(profile.image);
 
 			const userId = typeof state.user === 'string' && state.user ? state.user : profile.id;
 			if (typeof userId !== 'string' || !userId) return;
@@ -88,17 +94,18 @@ export default ({ odb, webCore }) => ({
 			const user = await odb.findOne({ collection: 'users', query: { id: userId } });
 			if (!user) return;
 
-			const canonicalFromUser = () => {
+
+			const canonicalFromUser = (targetProfile) => {
 				const id = user.id ?? user.$odb?.key ?? userId;
 				const canonicalId = normalizeUserId(id);
-				profile.id = canonicalId;
-				profile.name = normalizeName(user.name);
-				profile.role = normalizeRole(user.role);
-				profile.image = normalizeImage(user.image);
+				targetProfile.id = canonicalId;
+				targetProfile.name = normalizeName(user.name);
+				targetProfile.role = normalizeRole(user.role);
+				targetProfile.image = normalizeImage(user.image);
 				state.user = canonicalId;
 			};
 
-			canonicalFromUser();
+			canonicalFromUser(profile);
 
 			if (bridged.has(state)) return;
 			bridged.add(state);
@@ -128,14 +135,16 @@ export default ({ odb, webCore }) => ({
 					if (delta instanceof Delete) return delta;
 					const normalized = normalizeUserValue(key, delta.value);
 					if (key === 'id') state.user = normalized;
-					return { ...delta, value: normalized };
+					delta.value = normalized;
+					return delta;
 				}
 
 				if (dir === 'BtoA') {
 					if (!['name', 'image'].includes(key)) return null;
 					if (delta instanceof Delete) return delta;
 					const normalized = key === 'name' ? normalizeName(delta.value) : normalizeImage(delta.value);
-					return { ...delta, value: normalized };
+					delta.value = normalized;
+					return delta;
 				}
 
 				return delta;
@@ -148,23 +157,53 @@ export default ({ odb, webCore }) => ({
 				? profileToUserCfg.allow
 				: undefined;
 
-			const stop = Obridge({
-				a: user.observer,
-				b: profile.observer,
-				aToB: userToProfileEnabled,
-				bToA: profileToUserEnabled,
-				throttle: throttleMs,
-				allowAtoB: userToProfileAllow,
-				allowBtoA: profileToUserAllow,
-				transform,
-				flushA: profileToUserEnabled ? flushUser : null,
-				flushB: userToProfileEnabled ? flushState : null,
-			});
+			let stopBridge = null;
+
+			const startBridge = (nextProfile) => {
+				if (!nextProfile) return;
+				const prepared = prepareProfile(nextProfile);
+				if (prepared !== nextProfile) state.profile = prepared;
+
+				if (stopBridge) {
+					try { stopBridge(); } catch (err) {
+						console.error('state validator bridge cleanup error:', err);
+					}
+				}
+
+				stopBridge = Obridge({
+					a: user.observer,
+					b: prepared.observer,
+					aToB: userToProfileEnabled,
+					bToA: profileToUserEnabled,
+					throttle: throttleMs,
+					allowAtoB: userToProfileAllow,
+					allowBtoA: profileToUserAllow,
+					transform,
+					flushA: profileToUserEnabled ? flushUser : null,
+					flushB: userToProfileEnabled ? flushState : null,
+				});
+			};
+
+			startBridge(profile);
+
+
+			const stopProfileWatch = state.observer
+				.path('profile')
+				.watchCommit((commit) => {
+					for (const delta of commit) {
+						if (!Array.isArray(delta?.path)) continue;
+						if (delta.path.length !== 1 || delta.path[0] !== 'profile') continue;
+						startBridge(state.profile);
+					}
+				});
 
 			return () => {
-				if (stop) {
+				try { stopProfileWatch?.(); } catch (err) {
+					console.error('state validator profile watch cleanup error:', err);
+				}
+				if (stopBridge) {
 					try {
-						stop();
+						stopBridge();
 					} catch (err) {
 						console.error('state validator bridge cleanup error:', err);
 					}
