@@ -10,6 +10,7 @@ const normalizeImage = v => {
 };
 const normalizeRole = v => (v === 'admin' ? 'admin' : null);
 const normalizeUserId = v => (typeof v === 'string' && v.trim() ? v : null);
+const normalizeDescription = v => (typeof v === 'string' ? v.trim() : '');
 
 const ensureOObject = v => (v instanceof OObject ? v : OObject(v && typeof v === 'object' ? v : {}));
 const ensurePlainObject = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -26,6 +27,7 @@ export const defaults = {
 			['name'],
 			['role'],
 			['image'],
+			['description'],
 		],
 	},
 	profileToUser: {
@@ -33,6 +35,7 @@ export const defaults = {
 		allow: [
 			['name'],
 			['image'],
+			['description'],
 		],
 	},
 };
@@ -47,6 +50,8 @@ const normalizeUserValue = (key, value) => {
 			return normalizeImage(value);
 		case 'id':
 			return normalizeUserId(value);
+		case 'description':
+			return normalizeDescription(value);
 		default:
 			return value;
 	}
@@ -77,10 +82,12 @@ export default ({ odb, webCore }) => ({
 				if (!('name' in next)) next.name = '';
 				if (!('role' in next)) next.role = null;
 				if (!('image' in next)) next.image = null;
+				if (!('description' in next)) next.description = '';
 
 				next.name = normalizeName(next.name);
 				next.role = normalizeRole(next.role);
 				next.image = normalizeImage(next.image);
+				next.description = normalizeDescription(next.description);
 
 				return next;
 			};
@@ -102,6 +109,7 @@ export default ({ odb, webCore }) => ({
 				targetProfile.name = normalizeName(user.name);
 				targetProfile.role = normalizeRole(user.role);
 				targetProfile.image = normalizeImage(user.image);
+				targetProfile.description = normalizeDescription(user.description);
 				state.user = canonicalId;
 			};
 
@@ -131,7 +139,7 @@ export default ({ odb, webCore }) => ({
 				const key = delta.path[0];
 
 				if (dir === 'AtoB') {
-					if (!['id', 'name', 'role', 'image'].includes(key)) return null;
+					if (!['id', 'name', 'role', 'image', 'description'].includes(key)) return null;
 					if (delta instanceof Delete) return delta;
 					const normalized = normalizeUserValue(key, delta.value);
 					if (key === 'id') state.user = normalized;
@@ -140,9 +148,9 @@ export default ({ odb, webCore }) => ({
 				}
 
 				if (dir === 'BtoA') {
-					if (!['name', 'image'].includes(key)) return null;
+					if (!['name', 'image', 'description'].includes(key)) return null;
 					if (delta instanceof Delete) return delta;
-					const normalized = key === 'name' ? normalizeName(delta.value) : normalizeImage(delta.value);
+					const normalized = normalizeUserValue(key, delta.value);
 					delta.value = normalized;
 					return delta;
 				}

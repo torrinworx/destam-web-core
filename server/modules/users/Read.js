@@ -11,6 +11,7 @@ const toUserInfo = (user) => ({
 	id: user.$odb?.key ?? user.id ?? null,
 	name: user.name ?? '',
 	image: user.image ?? user.profileImage ?? null,
+	description: typeof user.description === 'string' ? user.description : '',
 	gigs: Array.isArray(user.gigs) ? [...user.gigs] : user.gigs ?? [],
 });
 
