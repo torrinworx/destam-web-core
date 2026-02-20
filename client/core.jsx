@@ -249,7 +249,7 @@ export const syncState = async () => {
 		await wsAuthKnown.defined(v => v === true);
 
 		state.enter = async ({ email, name, password }) => {
-			const response = await modReq('enter', {
+			const response = await modReq('auth/Enter', {
 				email: email.get(),
 				name: name?.get(),
 				password: password.get(),
@@ -270,7 +270,7 @@ export const syncState = async () => {
 		};
 
 		state.check = async (email) =>
-			await modReq('check', { email: email.get() });
+			await modReq('auth/Check', { email: email.get() });
 
 		state.modReq = modReq;
 
