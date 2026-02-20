@@ -1,21 +1,21 @@
 {
-    "name": "destam-web-core",
+    "name": "@destamatic/forge",
     "version": "1.0.0",
+    "type": "module",
+    "author": "Torrin Z. Leonard <torrin@worx4you.com> (https://torrinleonard.com/)",
+    "license": "GPL-3.0",
     "exports": {
         ".": "./common/index.js",
         "./client": "./client/index.js",
         "./server": "./server/index.js",
         "./server/servers/*": "./server/servers/*"
     },
-    "type": "module",
     "scripts": {
         "dev": "nodemon --watch ./server --watch ./example --exec node ./example/server.js",
         "start": "node ./example/server.js",
         "build": "npx vite build",
         "test": "node --test"
     },
-    "author": "Torrin Z. Leonard <torrin@worx4you.com> (https://torrinleonard.com/)",
-    "license": "GPL-3.0",
     "dependencies": {
         "bcryptjs": "^2.4.3",
         "cron-parser": "^5.5.0",
