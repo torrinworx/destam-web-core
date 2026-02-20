@@ -20,11 +20,57 @@ const send = (obj) => {
 	ws.send(JSON.stringify(obj));
 };
 
-const isAndroid = /Android/i.test(navigator.userAgent);
 
-// dev: on android device, talk to host machine via adb reverse
-const BACKEND_ORIGIN =
-	(isAndroid ? 'http://127.0.0.1:3002' : window.location.origin);
+// origin url stuff here is temp. Not really sure how to setup this stuff so that we don't need to hard code a url.
+// I want to setup an env variable thing for this , that just get's attached to window on build or dev mode. But idk
+// how that would work. this works for testing for now: 
+const readBackendOriginMeta = () => {
+	if (typeof document === 'undefined') return null;
+	const meta = document.querySelector('meta[name="destamatic-backend-origin"]');
+	return meta?.content?.trim() || null;
+};
+
+const getBackendOriginOverride = () => {
+	// Honor explicit overrides from meta tags or host globals so embeds/tests can target custom backends.
+	const metaOrigin = readBackendOriginMeta();
+	if (metaOrigin) return metaOrigin;
+
+	const globalDestamatic = window.DESTAMATIC;
+	const globalBackendOrigin = globalDestamatic?.backendOrigin;
+	if (typeof globalBackendOrigin === 'string' && globalBackendOrigin.trim()) {
+		return globalBackendOrigin.trim();
+	}
+
+	if (typeof window.DESTAMATIC_BACKEND_ORIGIN === 'string' && window.DESTAMATIC_BACKEND_ORIGIN.trim()) {
+		return window.DESTAMATIC_BACKEND_ORIGIN.trim();
+	}
+
+	if (typeof window.__DESTAMATIC_BACKEND_ORIGIN__ === 'string' && window.__DESTAMATIC_BACKEND_ORIGIN__.trim()) {
+		return window.__DESTAMATIC_BACKEND_ORIGIN__.trim();
+	}
+
+	return null;
+};
+
+const isLikelyAndroidWebView = () => {
+	// Heuristic that catches Android WebViews so we can route through the adb proxy when needed.
+	const ua = navigator.userAgent || '';
+	return /Android/i.test(ua) && /\b(wv|; wv\b|Version\/\d+\.\d+|WebView)/i.test(ua);
+};
+
+const getEmbeddedHostBackendOrigin = () => {
+	// Embedded hosts like Tauri or Android WebViews reach the server via adb proxy instead of window.location.
+	if (window.__TAURI__) return 'http://127.0.0.1:3002';
+	if (isLikelyAndroidWebView()) return 'http://127.0.0.1:3002';
+	return null;
+};
+
+const resolveBackendOrigin = () => {
+	// Always derive BACKEND_ORIGIN from the override/embedded helpers to keep detection in one place.
+	return getBackendOriginOverride() ?? getEmbeddedHostBackendOrigin() ?? window.location.origin;
+};
+
+const BACKEND_ORIGIN = resolveBackendOrigin();
 
 const wsURL = () => {
 	const token = webcoreToken.get() || '';
