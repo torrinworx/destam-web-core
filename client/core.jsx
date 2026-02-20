@@ -20,13 +20,22 @@ const send = (obj) => {
 	ws.send(JSON.stringify(obj));
 };
 
+const isAndroid = /Android/i.test(navigator.userAgent);
+
+// dev: on android device, talk to host machine via adb reverse
+const BACKEND_ORIGIN =
+	(isAndroid ? 'http://127.0.0.1:3002' : window.location.origin);
+
 const wsURL = () => {
 	const token = webcoreToken.get() || '';
-	const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-	const host = window.location.host; // includes port
-	return token
-		? `${protocol}${host}/?token=${encodeURIComponent(token)}`
-		: `${protocol}${host}/`;
+	const u = new URL(BACKEND_ORIGIN);
+
+	u.protocol = (u.protocol === 'https:') ? 'wss:' : 'ws:';
+	u.pathname = '/';
+	u.search = '';
+
+	if (token) u.searchParams.set('token', token);
+	return u.toString();
 };
 
 const cleanupSocket = (reason = 'socket closed') => {
