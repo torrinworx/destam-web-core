@@ -80,7 +80,7 @@ export default () => {
 			});
 		},
 		listen: (port) => server.listen(port || 3000, () => {
-			console.log(`destam-web-core running on http://localhost:${port || 3000}/ using http server.`);
+			console.log(`destamatic-forge running on http://localhost:${port || 3000}/ using http server.`);
 		})
 	}
 };
