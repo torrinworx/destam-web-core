@@ -6,6 +6,7 @@ The server is composed from small feature modules.
 
 - **Discovery**: modules are discovered by recursively scanning one or more directories for `.js` files.
   - Each file becomes a module name based on its path, e.g. `modules/posts/Create.js` -> `posts/Create`.
+  - Files that lack a default module factory export are skipped, so helper `.js` utilities can live alongside real modules without being loaded.
 - **Dependencies**: a module can declare `export const deps = ['other/module', ...]`.
   - Modules are loaded in dependency order.
 - **Factory**: a module must `export default (injection) => ({ ...handlers })`.
