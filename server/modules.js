@@ -77,6 +77,12 @@ const mapModules = async (directories, disabledNames) => {
 				}
 
 				const mod = await import(filePath);
+				const hasFactory = typeof mod.default === "function";
+				if (!hasFactory) {
+					processedCount++;
+					process.stdout.write(`\rProcessed ${processedCount}/${moduleFiles.length} module files...`);
+					return;
+				}
 
 				// TODO: if module is a web-core default module and user specifies their own
 				// override the webcore one with the user defined one to allow for customization.
@@ -85,14 +91,13 @@ const mapModules = async (directories, disabledNames) => {
 				}
 
 				const deps = Array.isArray(mod.deps) ? mod.deps : [];
-				const factory = typeof mod.default === "function" ? mod.default : null;
 				const defaults = isPlainObject(mod.defaults) ? mod.defaults : null;
 
 				modulesMap[moduleName] = {
 					directory,
 					filePath,
 					deps,
-					factory,
+					factory: mod.default,
 					defaults,
 				};
 
