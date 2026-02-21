@@ -1,13 +1,9 @@
-import bcryptjs from 'bcryptjs';
+import { comparePassword, hashPassword, isDevEnv, normalizePassword, validatePassword } from './CreatePwd.js';
 import { OObject } from 'destam';
 import UUID from 'destam/UUID.js';
 
 const isValidEmail = email =>
 	/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-const isDevEnv = () =>
-	process.env.NODE_ENV === 'development' ||
-	process.env.ENV === 'development';
 
 const createSession = async (odb, userId) => {
 	const token = UUID().toHex();
@@ -39,7 +35,7 @@ export default () => ({
 
 		email = typeof email === 'string' ? email.trim().toLowerCase() : '';
 		name = typeof name === 'string' ? name.trim() : '';
-		password = typeof password === 'string' ? password : '';
+		password = normalizePassword(password);
 
 		if (!email) return { error: 'Email is required.' };
 		if (!isValidEmail(email)) return { error: 'Please enter a valid email address.' };
@@ -57,7 +53,7 @@ export default () => ({
 					return { error: 'Invalid email or password' };
 				}
 
-				const ok = await bcryptjs.compare(password, user.password);
+				const ok = await comparePassword(password, user.password);
 				if (!ok) return { error: 'Invalid email or password' };
 
 				return { token: await createSession(odb, userId) };
@@ -67,12 +63,11 @@ export default () => ({
 			if (!name) return { error: 'Name is required.' };
 			if (name.length > 20) return { error: 'Name must be 20 characters or less.' };
 
-			if (!isDev) {
-				if (!password) return { error: 'Password is required.' };
-				if (password.length < 8) return { error: 'Password must be at least 8 characters.' };
-			}
+			const passwordValidation = validatePassword(password, { isDev });
+			if (!passwordValidation.ok) return { error: passwordValidation.error };
+			password = passwordValidation.value;
 
-			const hashedPassword = await bcryptjs.hash(password, 10);
+			const hashedPassword = await hashPassword(password);
 
 			const newUser = await odb.open({
 				collection: 'users',
