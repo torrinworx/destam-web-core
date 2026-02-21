@@ -26,6 +26,9 @@
         "uuid": "^11.0.3",
         "ws": "^8.18.0"
     },
+    "optionalDependencies": {
+        "nodemailer": "^6.9.16"
+    },
     "devDependencies": {
         "@babel/core": "^7.25.2",
         "@babel/generator": "^7.25.6",
