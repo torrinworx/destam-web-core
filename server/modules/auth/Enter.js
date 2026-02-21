@@ -75,6 +75,7 @@ export default () => ({
 					email,
 					name,
 					password: hashedPassword,
+					emailVerified: false,
 					createdAt: Date.now(),
 					modifiedAt: Date.now(),
 				}),

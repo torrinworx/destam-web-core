@@ -11,6 +11,7 @@ const normalizeImage = v => {
 const normalizeRole = v => (v === 'admin' ? 'admin' : null);
 const normalizeUserId = v => (typeof v === 'string' && v.trim() ? v : null);
 const normalizeDescription = v => (typeof v === 'string' ? v.trim() : '');
+const normalizeEmailVerified = v => v === true;
 
 const ensureOObject = v => (v instanceof OObject ? v : OObject(v && typeof v === 'object' ? v : {}));
 const ensurePlainObject = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -28,6 +29,7 @@ export const defaults = {
 			['role'],
 			['image'],
 			['description'],
+			['emailVerified'],
 		],
 	},
 	profileToUser: {
@@ -52,6 +54,8 @@ const normalizeUserValue = (key, value) => {
 			return normalizeUserId(value);
 		case 'description':
 			return normalizeDescription(value);
+		case 'emailVerified':
+			return normalizeEmailVerified(value);
 		default:
 			return value;
 	}
@@ -83,11 +87,13 @@ export default ({ odb, webCore }) => ({
 				if (!('role' in next)) next.role = null;
 				if (!('image' in next)) next.image = null;
 				if (!('description' in next)) next.description = '';
+				if (!('emailVerified' in next)) next.emailVerified = false;
 
 				next.name = normalizeName(next.name);
 				next.role = normalizeRole(next.role);
 				next.image = normalizeImage(next.image);
 				next.description = normalizeDescription(next.description);
+				next.emailVerified = normalizeEmailVerified(next.emailVerified);
 
 				return next;
 			};
@@ -110,6 +116,7 @@ export default ({ odb, webCore }) => ({
 				targetProfile.role = normalizeRole(user.role);
 				targetProfile.image = normalizeImage(user.image);
 				targetProfile.description = normalizeDescription(user.description);
+				targetProfile.emailVerified = normalizeEmailVerified(user.emailVerified);
 				state.user = canonicalId;
 			};
 
@@ -139,7 +146,7 @@ export default ({ odb, webCore }) => ({
 				const key = delta.path[0];
 
 				if (dir === 'AtoB') {
-					if (!['id', 'name', 'role', 'image', 'description'].includes(key)) return null;
+					if (!['id', 'name', 'role', 'image', 'description', 'emailVerified'].includes(key)) return null;
 					if (delta instanceof Delete) return delta;
 					const normalized = normalizeUserValue(key, delta.value);
 					if (key === 'id') state.user = normalized;
