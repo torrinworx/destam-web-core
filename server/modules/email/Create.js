@@ -12,7 +12,6 @@ export const defaults = {
 		},
 	},
 	from: 'no-reply@example.com',
-	subject: 'Notification',
 };
 
 const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -52,7 +51,6 @@ const buildConfig = (webCore) => {
 	return {
 		transport,
 		from: ensureTrimmedString(overrides.from) ?? defaults.from,
-		subject: ensureTrimmedString(overrides.subject) ?? defaults.subject,
 	};
 };
 
@@ -69,6 +67,9 @@ export default (injection = {}) => {
 			const htmlContent = ensureHtmlString(html);
 			if (!htmlContent) return { error: 'invalid_html' };
 
+			const cleanSubject = ensureTrimmedString(subject);
+			if (!cleanSubject) return { error: 'invalid_subject' };
+
 			const cleanUserId = ensureTrimmedString(userId);
 			if (!cleanUserId) return { error: 'invalid_user' };
 
@@ -84,7 +85,6 @@ export default (injection = {}) => {
 				return { error: 'user_missing_email' };
 			}
 
-			const toSubject = ensureTrimmedString(subject) ?? cfg.subject;
 			const now = Date.now();
 			let emailDoc = null;
 
@@ -95,7 +95,7 @@ export default (injection = {}) => {
 						userId: cleanUserId,
 						recipientEmail,
 						from: cfg.from,
-						subject: toSubject,
+						subject: cleanSubject,
 						html: htmlContent,
 						status: 'pending',
 						createdAt: now,
@@ -110,7 +110,7 @@ export default (injection = {}) => {
 					const sendResult = await transporter.sendMail({
 						from: cfg.from,
 						to: recipientEmail,
-						subject: toSubject,
+						subject: cleanSubject,
 						html: htmlContent,
 					});
 					const messageId = ensureTrimmedString(sendResult?.messageId) ?? null;
