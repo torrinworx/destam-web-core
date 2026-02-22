@@ -14,6 +14,7 @@ const toUserInfo = (user) => ({
 	image: user.image ?? user.profileImage ?? null,
 	description: typeof user.description === 'string' ? user.description : '',
 	gigs: Array.isArray(user.gigs) ? [...user.gigs] : user.gigs ?? [],
+	socialLinks: user.socialLinks,
 });
 
 export default () => ({
@@ -28,6 +29,7 @@ export default () => ({
 		if (singleId) {
 			const user = await odb.findOne({ collection: 'users', query: { id: singleId } });
 			if (!user) return null;
+
 			const out = toUserInfo(user);
 			await user.$odb.dispose();
 			return out;

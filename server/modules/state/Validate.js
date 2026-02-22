@@ -15,6 +15,61 @@ const normalizeEmailVerified = v => v === true;
 
 const ensureOObject = v => (v instanceof OObject ? v : OObject(v && typeof v === 'object' ? v : {}));
 const ensurePlainObject = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+const normalizeDomain = (value) => {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim().toLowerCase();
+	if (!trimmed) return null;
+	return trimmed.replace(/^https?:\/\//, '').replace(/\/$/, '');
+};
+const ensureAllowedDomains = (configValue) => {
+	if (configValue === false) return false;
+	if (!Array.isArray(configValue)) return [];
+	const result = [];
+	for (const entry of configValue) {
+		const domain = normalizeDomain(entry);
+		if (domain && !result.includes(domain)) result.push(domain);
+	}
+	return result;
+};
+const matchesAllowedDomain = (host, allowedDomain) => {
+	if (!host || !allowedDomain) return false;
+	if (host === allowedDomain) return true;
+	return host.endsWith(`.${allowedDomain}`);
+};
+const normalizeSocialLinkValue = (value, allowedDomains) => {
+	if (allowedDomains === false) return false;
+	if (!Array.isArray(allowedDomains) || allowedDomains.length === 0) return null;
+	if (typeof value !== 'string') return null;
+	let input = value.trim();
+	if (!input) return null;
+	if (!/^https?:\/\//i.test(input)) input = `https://${input}`;
+	let url;
+	try {
+		url = new URL(input);
+	} catch (err) {
+		return null;
+	}
+	const host = url.hostname?.toLowerCase?.();
+	if (!allowedDomains.some(domain => matchesAllowedDomain(host, domain))) return null;
+	url.protocol = 'https:';
+	url.hash = '';
+	return url.toString();
+};
+const normalizeSocialLinks = (value, allowedDomains) => {
+	if (allowedDomains === false) return false;
+	if (!Array.isArray(allowedDomains) || allowedDomains.length === 0) return [];
+	const input = Array.isArray(value) ? value : [];
+	const seen = new Set();
+	const out = [];
+	for (const entry of input) {
+		const normalized = normalizeSocialLinkValue(typeof entry === 'string' ? entry : '', allowedDomains);
+		if (normalized && !seen.has(normalized)) {
+			seen.add(normalized);
+			out.push(normalized);
+		}
+	}
+	return out;
+};
 
 const bridged = new WeakSet();
 
@@ -30,6 +85,7 @@ export const defaults = {
 			['image'],
 			['description'],
 			['emailVerified'],
+			['socialLinks'],
 		],
 	},
 	profileToUser: {
@@ -38,11 +94,18 @@ export const defaults = {
 			['name'],
 			['image'],
 			['description'],
+			['socialLinks'],
 		],
 	},
+	socialLinks: [
+		'instagram.com',
+		'linkedin.com',
+		'github.com',
+		'x.com',
+	],
 };
 
-const normalizeUserValue = (key, value) => {
+const normalizeUserValue = (key, value, socialLinkDomains) => {
 	switch (key) {
 		case 'name':
 			return normalizeName(value);
@@ -56,6 +119,8 @@ const normalizeUserValue = (key, value) => {
 			return normalizeDescription(value);
 		case 'emailVerified':
 			return normalizeEmailVerified(value);
+		case 'socialLinks':
+			return normalizeSocialLinks(value, socialLinkDomains);
 		default:
 			return value;
 	}
@@ -73,6 +138,9 @@ export default ({ odb, webCore }) => ({
 
       const userToProfileCfg = ensurePlainObject(cfg.userToProfile);
       const profileToUserCfg = ensurePlainObject(cfg.profileToUser);
+      const socialLinksConfig = cfg.socialLinks === undefined ? defaults.socialLinks : cfg.socialLinks;
+      const allowedSocialDomains = ensureAllowedDomains(socialLinksConfig);
+      const socialLinksEnabled = allowedSocialDomains !== false && allowedSocialDomains.length > 0;
 
       const userToProfileEnabled = userToProfileCfg.enabled !== false;
       const profileToUserEnabled = profileToUserCfg.enabled !== false;
@@ -88,12 +156,16 @@ export default ({ odb, webCore }) => ({
 				if (!('image' in next)) next.image = null;
 				if (!('description' in next)) next.description = '';
 				if (!('emailVerified' in next)) next.emailVerified = false;
+				if (!('socialLinks' in next)) next.socialLinks = socialLinksEnabled ? [] : false;
 
 				next.name = normalizeName(next.name);
 				next.role = normalizeRole(next.role);
 				next.image = normalizeImage(next.image);
 				next.description = normalizeDescription(next.description);
 				next.emailVerified = normalizeEmailVerified(next.emailVerified);
+				next.socialLinks = socialLinksEnabled
+					? normalizeSocialLinks(next.socialLinks, allowedSocialDomains)
+					: false;
 
 				return next;
 			};
@@ -117,6 +189,9 @@ export default ({ odb, webCore }) => ({
 				targetProfile.image = normalizeImage(user.image);
 				targetProfile.description = normalizeDescription(user.description);
 				targetProfile.emailVerified = normalizeEmailVerified(user.emailVerified);
+				targetProfile.socialLinks = socialLinksEnabled
+					? normalizeSocialLinks(user.socialLinks, allowedSocialDomains)
+					: false;
 				state.user = canonicalId;
 			};
 
@@ -146,18 +221,18 @@ export default ({ odb, webCore }) => ({
 				const key = delta.path[0];
 
 				if (dir === 'AtoB') {
-					if (!['id', 'name', 'role', 'image', 'description', 'emailVerified'].includes(key)) return null;
+					if (!['id', 'name', 'role', 'image', 'description', 'emailVerified', 'socialLinks'].includes(key)) return null;
 					if (delta instanceof Delete) return delta;
-					const normalized = normalizeUserValue(key, delta.value);
+					const normalized = normalizeUserValue(key, delta.value, allowedSocialDomains);
 					if (key === 'id') state.user = normalized;
 					delta.value = normalized;
 					return delta;
 				}
 
 				if (dir === 'BtoA') {
-					if (!['name', 'image', 'description'].includes(key)) return null;
+					if (!['name', 'image', 'description', 'socialLinks'].includes(key)) return null;
 					if (delta instanceof Delete) return delta;
-					const normalized = normalizeUserValue(key, delta.value);
+					const normalized = normalizeUserValue(key, delta.value, allowedSocialDomains);
 					delta.value = normalized;
 					return delta;
 				}
