@@ -13,7 +13,6 @@ const toUserInfo = (user) => ({
 	emailVerified: user.emailVerified === true,
 	image: user.image ?? user.profileImage ?? null,
 	description: typeof user.description === 'string' ? user.description : '',
-	gigs: Array.isArray(user.gigs) ? [...user.gigs] : user.gigs ?? [],
 	socialLinks: user.socialLinks,
 });
 
