@@ -1,3 +1,5 @@
+import { OArray } from 'destam';
+
 const normalizeEmail = email =>
 	typeof email === 'string' ? email.trim().toLowerCase() : '';
 
@@ -44,12 +46,22 @@ export default () => {
 				user.name = typeof user.name === 'string' ? user.name.trim() : '';
 				if (typeof user.password !== 'string') user.password = '';
 
-				const applySocialLinksNormalization = () => {
-					const normalized = normalizeSocialLinksArray(user.socialLinks);
-					if (!socialLinksEqual(user.socialLinks, normalized)) {
-						user.socialLinks = normalized;
-					}
-				};
+			const ensureSocialLinks = () => {
+				if (user.socialLinks === false) return;
+				if (!(user.socialLinks instanceof OArray)) {
+					const base = Array.isArray(user.socialLinks) ? user.socialLinks : [];
+					user.socialLinks = OArray(base);
+				}
+			};
+
+			const applySocialLinksNormalization = () => {
+				if (user.socialLinks === false) return;
+				ensureSocialLinks();
+				const normalized = normalizeSocialLinksArray(user.socialLinks);
+				if (!socialLinksEqual(user.socialLinks, normalized)) {
+					user.socialLinks.splice(0, user.socialLinks.length, ...normalized);
+				}
+			};
 				applySocialLinksNormalization();
 
 				// keep email normalized if it changes later

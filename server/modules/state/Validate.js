@@ -1,5 +1,5 @@
-import { Delete, OObject } from 'destam';
-import { Obridge } from '../../../common/index.js';
+import { Delete, OObject, OArray } from 'destam';
+import { Obridge, clone } from '../../../common/index.js';
 
 const normalizeName = v => (typeof v === 'string' ? v.trim() : '');
 const normalizeImage = v => {
@@ -133,17 +133,17 @@ export default ({ odb, webCore }) => ({
 		register: async state => {
 			if (!state || typeof state !== 'object') return;
 
-      const cfg = ensurePlainObject(webCore?.config);
-      const throttleMs = Number.isFinite(cfg.throttleMs) && cfg.throttleMs >= 0 ? Math.floor(cfg.throttleMs) : 0;
+			const cfg = ensurePlainObject(webCore?.config);
+			const throttleMs = Number.isFinite(cfg.throttleMs) && cfg.throttleMs >= 0 ? Math.floor(cfg.throttleMs) : 0;
 
-      const userToProfileCfg = ensurePlainObject(cfg.userToProfile);
-      const profileToUserCfg = ensurePlainObject(cfg.profileToUser);
-      const socialLinksConfig = cfg.socialLinks === undefined ? defaults.socialLinks : cfg.socialLinks;
-      const allowedSocialDomains = ensureAllowedDomains(socialLinksConfig);
-      const socialLinksEnabled = allowedSocialDomains !== false && allowedSocialDomains.length > 0;
+			const userToProfileCfg = ensurePlainObject(cfg.userToProfile);
+			const profileToUserCfg = ensurePlainObject(cfg.profileToUser);
+			const socialLinksConfig = cfg.socialLinks === undefined ? defaults.socialLinks : cfg.socialLinks;
+			const allowedSocialDomains = ensureAllowedDomains(socialLinksConfig);
+			const socialLinksEnabled = allowedSocialDomains !== false && allowedSocialDomains.length > 0;
 
-      const userToProfileEnabled = userToProfileCfg.enabled !== false;
-      const profileToUserEnabled = profileToUserCfg.enabled !== false;
+			const userToProfileEnabled = userToProfileCfg.enabled !== false;
+			const profileToUserEnabled = profileToUserCfg.enabled !== false;
 
 			if (!userToProfileEnabled && !profileToUserEnabled) return;
 
@@ -156,16 +156,21 @@ export default ({ odb, webCore }) => ({
 				if (!('image' in next)) next.image = null;
 				if (!('description' in next)) next.description = '';
 				if (!('emailVerified' in next)) next.emailVerified = false;
-				if (!('socialLinks' in next)) next.socialLinks = socialLinksEnabled ? [] : false;
+				if (!('socialLinks' in next)) next.socialLinks = socialLinksEnabled ? OArray([]) : false;
 
 				next.name = normalizeName(next.name);
 				next.role = normalizeRole(next.role);
 				next.image = normalizeImage(next.image);
 				next.description = normalizeDescription(next.description);
 				next.emailVerified = normalizeEmailVerified(next.emailVerified);
-				next.socialLinks = socialLinksEnabled
-					? normalizeSocialLinks(next.socialLinks, allowedSocialDomains)
-					: false;
+				if (socialLinksEnabled) {
+					const normalized = normalizeSocialLinks(next.socialLinks, allowedSocialDomains);
+					next.socialLinks = next.socialLinks instanceof OArray
+						? (next.socialLinks.splice(0, next.socialLinks.length, ...normalized), next.socialLinks)
+						: OArray(normalized);
+				} else {
+					next.socialLinks = false;
+				}
 
 				return next;
 			};
@@ -189,9 +194,17 @@ export default ({ odb, webCore }) => ({
 				targetProfile.image = normalizeImage(user.image);
 				targetProfile.description = normalizeDescription(user.description);
 				targetProfile.emailVerified = normalizeEmailVerified(user.emailVerified);
-				targetProfile.socialLinks = socialLinksEnabled
-					? normalizeSocialLinks(user.socialLinks, allowedSocialDomains)
-					: false;
+				if (socialLinksEnabled) {
+					const normalizedSocialLinks = normalizeSocialLinks(user.socialLinks, allowedSocialDomains);
+					if (!(user.socialLinks instanceof OArray)) {
+						user.socialLinks = OArray(normalizedSocialLinks);
+					} else {
+						user.socialLinks.splice(0, user.socialLinks.length, ...normalizedSocialLinks);
+					}
+					targetProfile.socialLinks = clone(user.socialLinks);
+				} else {
+					targetProfile.socialLinks = false;
+				}
 				state.user = canonicalId;
 			};
 
@@ -219,6 +232,24 @@ export default ({ odb, webCore }) => ({
 			const transform = (delta, dir) => {
 				if (!delta || !Array.isArray(delta.path) || delta.path.length === 0) return null;
 				const key = delta.path[0];
+
+				if (key === 'socialLinks') {
+					if (delta instanceof Delete) return delta;
+					if (delta.path.length > 1) {
+						const normalized = normalizeSocialLinkValue(delta.value, allowedSocialDomains);
+						if (!normalized) return null;
+						delta.value = normalized;
+						return delta;
+					}
+
+					const normalized = normalizeSocialLinks(delta.value, allowedSocialDomains);
+					if (normalized === false) {
+						delta.value = false;
+						return delta;
+					}
+					delta.value = OArray(normalized);
+					return delta;
+				}
 
 				if (dir === 'AtoB') {
 					if (!['id', 'name', 'role', 'image', 'description', 'emailVerified', 'socialLinks'].includes(key)) return null;
@@ -275,7 +306,6 @@ export default ({ odb, webCore }) => ({
 			};
 
 			startBridge(profile);
-
 
 			const stopProfileWatch = state.observer
 				.path('profile')
