@@ -166,7 +166,7 @@ export const runODBDriverTests = ({
 		}
 	});
 
-	test(`[${name}] detects revision conflict on concurrent save`, async () => {
+	test(`[${name}] resolves revision conflict on concurrent save`, async () => {
 		let db1;
 		let db2;
 
@@ -197,14 +197,10 @@ export const runODBDriverTests = ({
 			if (doc2.$odb && typeof doc2.$odb.rev === 'number') {
 				doc2.$odb.rev = 0;
 			}
-			let threw = false;
-			try {
-				await doc2.$odb.flush();
-			} catch (e) {
-				threw = true;
-				expect(e.message.toLowerCase()).to.include('conflict');
-			}
-			expect(threw).to.equal(true);
+			await doc2.$odb.flush();
+			const reloaded = await db2.findOne({ collection, query: { kind: 'rev-conflict' } });
+			expect(reloaded).to.be.instanceOf(OObject);
+			expect(reloaded.count).to.equal(1);
 		} finally {
 			await Promise.allSettled([db1?.close?.(), db2?.close?.()]);
 		}
