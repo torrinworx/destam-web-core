@@ -99,6 +99,19 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port, mod
 			if (ws.readyState === 1) ws.send(JSON.stringify(obj));
 		};
 
+		const resolveIp = req => {
+			const forwarded = req?.headers?.['x-forwarded-for'];
+			if (typeof forwarded === 'string' && forwarded.trim()) {
+				return forwarded.split(',')[0].trim();
+			}
+			if (Array.isArray(forwarded) && forwarded.length) {
+				return forwarded[0].split(',')[0].trim();
+			}
+			return req?.socket?.remoteAddress || req?.connection?.remoteAddress || null;
+		};
+
+		const clientIp = resolveIp(req);
+
 		const normalizeToken = t => {
 			if (typeof t !== 'string') return null;
 			t = t.trim();
@@ -286,6 +299,7 @@ const core = async ({ server = null, root, modulesDir, db, table, env, port, mod
 						sync,
 						user,
 						token,
+						ip: clientIp,
 						...modProps,
 					}
 				);

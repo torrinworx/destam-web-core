@@ -98,6 +98,7 @@ const ActionField = ({
 	disabled,
 	textFieldType = 'contained',
 	buttonType = 'text',
+	icon = <Icon name='feather:plus' style={{ color: 'currentColor' }} />,
 }) => {
 	if (!(disabled instanceof Observer)) disabled = Observer.mutable(disabled);
 
@@ -183,9 +184,7 @@ const ActionField = ({
 		<Button
 			type={buttonType}
 			hover={buttonHovered}
-			icon={<Icon name='feather:plus' style={{
-				color: 'currentColor',
-			}} />}
+			icon={icon}
 			style={{ color: iconColor }}
 			onClick={event => {
 				if (disabled.get()) return;

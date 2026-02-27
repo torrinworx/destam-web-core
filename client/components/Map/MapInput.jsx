@@ -6,15 +6,16 @@ import {
 	ThemeContext,
 	Button,
 	Icon,
-	Paper,
 	Typography,
 	Slider,
 	Shown,
-	TextField,
 	Detached,
 	useAbort,
 } from '@destamatic/ui';
 
+import { modReq } from '../../core.jsx';
+import ActionField from '../ActionField/ActionField.jsx';
+import Paper from '../Paper/Paper.jsx';
 import Map from './Map.jsx';
 
 Theme.define({
@@ -44,6 +45,20 @@ Theme.define({
 
 	mapInput_map: {
 		width: '100%',
+	},
+
+	mapInput_searchPopup: {
+		background: '$invert($color_top)',
+		color: '$color_top',
+		border: '1px solid $alpha($color_top, 0.12)',
+		boxShadow: '0 10px 26px $alpha($color_top, 0.18)',
+	},
+
+	mapInput_searchAttribution: {
+		opacity: 0.6,
+		borderTop: '1px solid $alpha($color_top, 0.08)',
+		marginTop: 6,
+		paddingTop: 6,
 	},
 });
 
@@ -283,10 +298,8 @@ export default ThemeContext.use(h => {
 
 			try {
 				const limit = searchLimitObserver.get();
-				const params = new URLSearchParams({ q: query, limit: String(limit) });
-				const res = await fetch(`/api/geo/search?${params.toString()}`);
-				const data = await res.json();
-				if (!res.ok || !data?.ok) {
+				const data = await modReq('geo/Nominatim', { q: query, limit });
+				if (!data?.ok) {
 					searchError.set(data?.error || 'Search failed');
 					searchResults.set([]);
 					return;
@@ -401,38 +414,20 @@ export default ThemeContext.use(h => {
 								ref={searchAnchorRef}
 								style={{ minWidth: 260, flex: 1, display: 'flex', alignItems: 'center' }}
 							>
-								<div
-									style={{
-										display: 'flex',
-										alignItems: 'center',
-										gap: 8,
-										width: '100%',
-									}}
-								>
-									<TextField
-										type="outlined"
-										placeholder="Search for a place"
-										value={searchQuery}
-										style={{ flex: 1, minWidth: 220 }}
-										onKeyDown={(event) => {
-											if (event.key === 'Enter') {
-												event.preventDefault();
-												runSearch();
-											}
-										}}
-									/>
-									<Button
-										type="outlined"
-										icon={<Icon name="feather:search" />}
-										style={{ margin: 0 }}
-										onClick={() => runSearch()}
-									/>
-								</div>
+								<ActionField
+									value={searchQuery}
+									placeholder="Search for a place"
+									textFieldType="outlined"
+									buttonType="outlined"
+									icon={<Icon name="feather:search" style={{ color: 'currentColor' }} />}
+									onAction={() => runSearch()}
+								/>
 							</div>
 						</mark:anchor>
 
 						<mark:popup>
 							<Paper
+								type="mapInput_searchPopup"
 								style={{
 									width: searchAnchorWidth.map(w => Number.isFinite(w) && w > 0 ? w : 320),
 									minWidth: 260,
@@ -455,22 +450,28 @@ export default ThemeContext.use(h => {
 								<Shown value={showEmptyResults}>
 									<Typography type="p2" label="No results" />
 								</Shown>
-								{searchResults.map(results => (results || []).map((result, idx) => (
-									<div
-										key={idx}
-										onClick={() => selectSearchResult(result)}
-										style={{
-											padding: '6px 4px',
-											cursor: 'pointer',
-											borderBottom: '1px solid rgba(0,0,0,0.08)',
-										}}
-									>
-										<Typography type="p2" label={result?.label || 'Unknown'} />
-										{result?.type ? <Typography type="p3" label={result.type} style={{ opacity: 0.7 }} /> : null}
-									</div>
-								))).unwrap()}
+						{searchResults.map(results => (results || []).map((result, idx) => (
+							<Button
+								key={idx}
+								type="text"
+								onClick={() => selectSearchResult(result)}
+								style={{
+									width: '100%',
+									alignItems: 'flex-start',
+									justifyContent: 'flex-start',
+									flexDirection: 'column',
+									gap: 2,
+									padding: '8px 6px',
+									borderBottom: '1px solid $alpha($color_top, 0.08)',
+									borderRadius: 0,
+								}}
+							>
+								<Typography type="p2" label={result?.label || 'Unknown'} />
+								{result?.type ? <Typography type="p3" label={result.type} style={{ opacity: 0.7 }} /> : null}
+							</Button>
+						))).unwrap()}
 								<Shown value={searchAttribution.map(a => !!a)}>
-									<Typography type="p3" label={searchAttribution} style={{ opacity: 0.6, marginTop: 8 }} />
+									<Typography type="p3" label={searchAttribution} theme="mapInput_searchAttribution" />
 								</Shown>
 							</Paper>
 						</mark:popup>

@@ -54,14 +54,10 @@ const createCache = (maxSize) => {
 	return { get, set };
 };
 
-export default ({ serverProps, webCore }) => {
-	const app = serverProps?.app;
-	if (!app) return;
-
+export default ({ webCore } = {}) => {
 	const cfg = webCore?.config || {};
 	const messages = isPlainObject(cfg.messages) ? { ...defaults.messages, ...cfg.messages } : defaults.messages;
 
-	const route = typeof cfg.route === 'string' && cfg.route ? cfg.route : defaults.route;
 	const baseUrl = typeof cfg.baseUrl === 'string' && cfg.baseUrl ? cfg.baseUrl : defaults.baseUrl;
 	const userAgent = typeof cfg.userAgent === 'string' && cfg.userAgent ? cfg.userAgent : defaults.userAgent;
 	const referer = typeof cfg.referer === 'string' && cfg.referer ? cfg.referer : defaults.referer;
@@ -106,77 +102,80 @@ export default ({ serverProps, webCore }) => {
 		return { ok: true };
 	};
 
-	app.get(route, async (req, res) => {
-		try {
-			const q = normalizeQuery(req.query?.q);
-			if (!q) return res.status(400).json({ ok: false, error: messages.missingQuery });
-			if (q.length < minQueryLength) {
-				return res.status(400).json({ ok: false, error: messages.queryTooShort });
+	return {
+		authenticated: false,
+		onMsg: async ({ q, limit } = {}, { ip } = {}) => {
+			try {
+				const query = normalizeQuery(q);
+				if (!query) return { ok: false, error: messages.missingQuery };
+				if (query.length < minQueryLength) return { ok: false, error: messages.queryTooShort };
+
+				const rate = checkRate(ip);
+				if (!rate.ok) {
+					return { ok: false, error: messages.rateLimited, retryAfterMs: rate.retryAfterMs };
+				}
+
+				const safeLimit = Number.isFinite(parseInt(limit, 10))
+					? clamp(parseInt(limit, 10), 1, maxResults)
+					: maxResults;
+
+				const cacheKey = `${query.toLowerCase()}|${safeLimit}`;
+				const cached = cache.get(cacheKey, cacheTtlMs);
+				if (cached) {
+					return { ok: true, results: cached, attribution: attributionText, cached: true };
+				}
+
+				const params = new URLSearchParams({
+					format: 'json',
+					addressdetails: '1',
+					limit: String(safeLimit),
+					q: query,
+				});
+				if (acceptLanguage) params.set('accept-language', acceptLanguage);
+				if (email) params.set('email', email);
+
+				const controller = new AbortController();
+				const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+				let response;
+				try {
+					response = await fetch(`${baseUrl}?${params.toString()}`, {
+						headers: {
+							'User-Agent': userAgent,
+							...(referer ? { Referer: referer } : {}),
+						},
+						signal: controller.signal,
+					});
+				} finally {
+					clearTimeout(timeout);
+				}
+
+				if (!response?.ok) {
+					return { ok: false, error: messages.upstreamError };
+				}
+
+				const data = await response.json();
+				if (!Array.isArray(data)) {
+					return { ok: false, error: messages.upstreamError };
+				}
+
+				const results = data.map(item => ({
+					label: item?.display_name ?? '',
+					lat: parseFloat(item?.lat),
+					lng: parseFloat(item?.lon),
+					type: item?.type ?? item?.class ?? '',
+					raw: item,
+				})).filter(item => Number.isFinite(item.lat) && Number.isFinite(item.lng));
+
+				cache.set(cacheKey, results);
+				return { ok: true, results, attribution: attributionText, cached: false };
+			} catch (err) {
+				if (err?.name === 'AbortError') {
+					return { ok: false, error: messages.upstreamError };
+				}
+				console.error('nominatim search error:', err);
+				return { ok: false, error: messages.internalError };
 			}
-
-			const rate = checkRate(req.ip);
-			if (!rate.ok) {
-				res.setHeader('Retry-After', Math.ceil(rate.retryAfterMs / 1000));
-				return res.status(429).json({ ok: false, error: messages.rateLimited });
-			}
-
-			const limit = Number.isFinite(parseInt(req.query?.limit, 10))
-				? clamp(parseInt(req.query.limit, 10), 1, maxResults)
-				: maxResults;
-
-			const cacheKey = `${q.toLowerCase()}|${limit}`;
-			const cached = cache.get(cacheKey, cacheTtlMs);
-			if (cached) {
-				return res.json({ ok: true, results: cached, attribution: attributionText, cached: true });
-			}
-
-			const params = new URLSearchParams({
-				format: 'json',
-				addressdetails: '1',
-				limit: String(limit),
-				q,
-			});
-			if (acceptLanguage) params.set('accept-language', acceptLanguage);
-			if (email) params.set('email', email);
-
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
-
-			const response = await fetch(`${baseUrl}?${params.toString()}`, {
-				headers: {
-					'User-Agent': userAgent,
-					...(referer ? { Referer: referer } : {}),
-				},
-				signal: controller.signal,
-			});
-
-			clearTimeout(timeout);
-
-			if (!response.ok) {
-				return res.status(502).json({ ok: false, error: messages.upstreamError });
-			}
-
-			const data = await response.json();
-			if (!Array.isArray(data)) {
-				return res.status(502).json({ ok: false, error: messages.upstreamError });
-			}
-
-			const results = data.map(item => ({
-				label: item?.display_name ?? '',
-				lat: parseFloat(item?.lat),
-				lng: parseFloat(item?.lon),
-				type: item?.type ?? item?.class ?? '',
-				raw: item,
-			})).filter(item => Number.isFinite(item.lat) && Number.isFinite(item.lng));
-
-			cache.set(cacheKey, results);
-			return res.json({ ok: true, results, attribution: attributionText, cached: false });
-		} catch (err) {
-			if (err?.name === 'AbortError') {
-				return res.status(504).json({ ok: false, error: messages.upstreamError });
-			}
-			console.error('nominatim search error:', err);
-			return res.status(500).json({ ok: false, error: messages.internalError });
-		}
-	});
+		},
+	};
 };
