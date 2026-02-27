@@ -3,7 +3,7 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 export const defaults = {
 	route: '/api/geo/search',
 	baseUrl: 'https://nominatim.openstreetmap.org/search',
-	userAgent: 'KWBuilds/0.1 (contact: torrin@torrin.me)',
+	userAgent: '',
 	referer: null,
 	acceptLanguage: 'en',
 	email: null,
