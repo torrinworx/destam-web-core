@@ -10,6 +10,9 @@ import {
 	Typography,
 	Slider,
 	Shown,
+	TextField,
+	Detached,
+	useAbort,
 } from '@destamatic/ui';
 
 import Map from './Map.jsx';
@@ -59,7 +62,7 @@ const normalizeObserver = (value, fallback, mutable = true) => {
 
 const normalizeModes = (allowModes) => {
 	const list = Array.isArray(allowModes) ? allowModes.filter(Boolean) : null;
-	return list && list.length ? list : ['point', 'current', 'radius'];
+	return list && list.length ? list : ['point', 'current', 'radius', 'search'];
 };
 
 const pickInitialMode = (modes, current) => {
@@ -75,6 +78,8 @@ export default ThemeContext.use(h => {
 		minRadius = 100,
 		maxRadius = 5000,
 		radiusStep = 50,
+		searchLimit = 8,
+		searchMinLength = 3,
 		defaultMode = null,
 		autoLocate = false,
 		draggableMarker = true,
@@ -98,6 +103,17 @@ export default ThemeContext.use(h => {
 		const mode = Observer.mutable(pickInitialMode(modes, defaultMode));
 		const zoom = normalizeObserver(mapProps.zoom ?? 13, 13, true);
 		const mapHeightObserver = mapHeight instanceof Observer ? mapHeight : Observer.immutable(mapHeight);
+		const searchLimitObserver = searchLimit instanceof Observer ? searchLimit : Observer.immutable(searchLimit);
+		const searchMinLengthObserver = searchMinLength instanceof Observer ? searchMinLength : Observer.immutable(searchMinLength);
+
+		const searchQuery = Observer.mutable('');
+		const searchResults = Observer.mutable([]);
+		const searchOpen = Observer.mutable(false);
+		const searchLoading = Observer.mutable(false);
+		const searchError = Observer.mutable('');
+		const searchAttribution = Observer.mutable('');
+		const searchAnchorRef = Observer.mutable(null);
+		const searchAnchorWidth = Observer.mutable(320);
 
 		let marker = null;
 		let circle = null;
@@ -231,6 +247,10 @@ export default ThemeContext.use(h => {
 
 		const radiusLabel = radius.map(r => `${Math.round(r)} m`);
 		const showRadius = mode.map(m => m === 'radius');
+		const showSearch = mode.map(m => m === 'search');
+		const hasResults = searchResults.map(results => Array.isArray(results) && results.length > 0);
+		const showEmptyResults = Observer.all([searchLoading, hasResults, searchError])
+			.map(([loading, has, err]) => !loading && !has && !err);
 
 		const api = {
 			mode,
@@ -243,6 +263,69 @@ export default ThemeContext.use(h => {
 			value: valueObserver,
 			mapRef,
 		};
+
+		const runSearch = async () => {
+			const query = (searchQuery.get() || '').trim();
+			const minLen = searchMinLengthObserver.get();
+			if (mode.get() !== 'search') mode.set('search');
+			if (query.length < minLen) {
+				searchError.set(`Enter at least ${minLen} characters.`);
+				searchResults.set([]);
+				searchOpen.set(true);
+				return;
+			}
+
+			if (searchLoading.get()) return;
+			searchLoading.set(true);
+			searchError.set('');
+			searchAttribution.set('');
+			searchOpen.set(true);
+
+			try {
+				const limit = searchLimitObserver.get();
+				const params = new URLSearchParams({ q: query, limit: String(limit) });
+				const res = await fetch(`/api/geo/search?${params.toString()}`);
+				const data = await res.json();
+				if (!res.ok || !data?.ok) {
+					searchError.set(data?.error || 'Search failed');
+					searchResults.set([]);
+					return;
+				}
+				searchResults.set(data?.results || []);
+				searchAttribution.set(data?.attribution || '');
+			} catch (err) {
+				searchError.set('Search failed');
+				searchResults.set([]);
+			} finally {
+				searchLoading.set(false);
+			}
+		};
+
+		const selectSearchResult = (result) => {
+			if (!result) return;
+			selectPoint({ lat: result.lat, lng: result.lng });
+			mode.set('search');
+			searchOpen.set(false);
+		};
+
+		cleanup(mode.effect((next) => {
+			if (next !== 'search') searchOpen.set(false);
+		}));
+
+		cleanup(searchOpen.effect((open) => {
+			if (!open) return;
+			return useAbort(signal => {
+				const update = () => {
+					const el = searchAnchorRef.get();
+					if (!el) return;
+					const nextWidth = el.getBoundingClientRect().width;
+					if (Number.isFinite(nextWidth) && nextWidth > 0) searchAnchorWidth.set(nextWidth);
+				};
+				update();
+				window.addEventListener('resize', update, { signal });
+				window.addEventListener('scroll', update, { signal, passive: true });
+			})();
+		}));
 
 		const defaultControls = <Paper type="mapInput_controls" style={{ padding: 10 }}>
 			<div
@@ -273,6 +356,12 @@ export default ThemeContext.use(h => {
 					type={mode.map(m => m === 'current' ? 'contained' : 'outlined')}
 					onClick={() => requestLocation()}
 				/> : null}
+				{modes.includes('search') ? <Button
+					label="Search"
+					icon={<Icon name="feather:search" />}
+					type={mode.map(m => m === 'search' ? 'contained' : 'outlined')}
+					onClick={() => mode.set('search')}
+				/> : null}
 
 				<Shown value={showRadius}>
 					<div
@@ -296,6 +385,96 @@ export default ThemeContext.use(h => {
 							/>
 						</div>
 					</div>
+				</Shown>
+
+				<Shown value={showSearch}>
+					<Detached
+						enabled={searchOpen}
+						locations={[
+							Detached.BOTTOM_LEFT_RIGHT,
+							Detached.BOTTOM_RIGHT_LEFT,
+						]}
+						style={{ zIndex: 2000 }}
+					>
+						<mark:anchor>
+							<div
+								ref={searchAnchorRef}
+								style={{ minWidth: 260, flex: 1, display: 'flex', alignItems: 'center' }}
+							>
+								<div
+									style={{
+										display: 'flex',
+										alignItems: 'center',
+										gap: 8,
+										width: '100%',
+									}}
+								>
+									<TextField
+										type="outlined"
+										placeholder="Search for a place"
+										value={searchQuery}
+										style={{ flex: 1, minWidth: 220 }}
+										onKeyDown={(event) => {
+											if (event.key === 'Enter') {
+												event.preventDefault();
+												runSearch();
+											}
+										}}
+									/>
+									<Button
+										type="outlined"
+										icon={<Icon name="feather:search" />}
+										style={{ margin: 0 }}
+										onClick={() => runSearch()}
+									/>
+								</div>
+							</div>
+						</mark:anchor>
+
+						<mark:popup>
+							<Paper
+								style={{
+									width: searchAnchorWidth.map(w => Number.isFinite(w) && w > 0 ? w : 320),
+									minWidth: 260,
+									maxWidth: 520,
+									boxSizing: 'border-box',
+									maxHeight: 240,
+									overflowY: 'auto',
+									padding: 10,
+								}}
+								onPointerDown={e => e.stopPropagation()}
+								onTouchStart={e => e.stopPropagation()}
+								onMouseDown={e => e.stopPropagation()}
+							>
+								<Shown value={searchLoading}>
+									<Typography type="p2" label="Searching..." />
+								</Shown>
+								<Shown value={searchError.map(e => !!e)}>
+									<Typography type="p2" label={searchError} style={{ color: '$color_error' }} />
+								</Shown>
+								<Shown value={showEmptyResults}>
+									<Typography type="p2" label="No results" />
+								</Shown>
+								{searchResults.map(results => (results || []).map((result, idx) => (
+									<div
+										key={idx}
+										onClick={() => selectSearchResult(result)}
+										style={{
+											padding: '6px 4px',
+											cursor: 'pointer',
+											borderBottom: '1px solid rgba(0,0,0,0.08)',
+										}}
+									>
+										<Typography type="p2" label={result?.label || 'Unknown'} />
+										{result?.type ? <Typography type="p3" label={result.type} style={{ opacity: 0.7 }} /> : null}
+									</div>
+								))).unwrap()}
+								<Shown value={searchAttribution.map(a => !!a)}>
+									<Typography type="p3" label={searchAttribution} style={{ opacity: 0.6, marginTop: 8 }} />
+								</Shown>
+							</Paper>
+						</mark:popup>
+					</Detached>
 				</Shown>
 			</div>
 		</Paper>;
