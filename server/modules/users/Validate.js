@@ -1,6 +1,5 @@
 const normalizeEmail = email =>
 	typeof email === 'string' ? email.trim().toLowerCase() : '';
-const normalizeEmailVerified = value => value === true;
 
 const normalizeSocialLinksArray = (value) => {
 	if (value === false) return false;
@@ -16,6 +15,7 @@ const normalizeSocialLinksArray = (value) => {
 	}
 	return out;
 };
+
 const socialLinksEqual = (a, b) => {
 	if (a === false || b === false) return a === b;
 	if (!Array.isArray(a) || !Array.isArray(b)) return false;
@@ -27,22 +27,22 @@ const socialLinksEqual = (a, b) => {
 };
 
 export default () => {
-    return {
-        validate: {
-            table: 'users',
+	return {
+		validate: {
+			table: 'users',
 
-            register: user => {
-                if (!user || typeof user !== 'object') return;
+			register: user => {
+				if (!user || typeof user !== 'object') return;
 
 				// normalize now
 				const email = normalizeEmail(user.email);
 				if (email && user.email !== email) user.email = email;
 
-				const emailVerified = normalizeEmailVerified(user.emailVerified);
+				const emailVerified = user.emailVerified === true;
 				if (user.emailVerified !== emailVerified) user.emailVerified = emailVerified;
 
-                user.name = typeof user.name === 'string' ? user.name.trim() : '';
-                if (typeof user.password !== 'string') user.password = '';
+				user.name = typeof user.name === 'string' ? user.name.trim() : '';
+				if (typeof user.password !== 'string') user.password = '';
 
 				const applySocialLinksNormalization = () => {
 					const normalized = normalizeSocialLinksArray(user.socialLinks);
@@ -52,7 +52,7 @@ export default () => {
 				};
 				applySocialLinksNormalization();
 
-                // keep email normalized if it changes later
+				// keep email normalized if it changes later
 				const stopEmail =
 					user.observer
 						?.path('email')
@@ -65,7 +65,7 @@ export default () => {
 					user.observer
 						?.path('emailVerified')
 						.watch(() => {
-							const v = normalizeEmailVerified(user.emailVerified);
+							const v = user.emailVerified === true;
 							if (user.emailVerified !== v) user.emailVerified = v;
 						});
 
@@ -76,13 +76,13 @@ export default () => {
 							applySocialLinksNormalization();
 						});
 
-                // let the caller clean this up if they support it
+				// let the caller clean this up if they support it
 				return () => {
 					try { stopEmail?.(); } catch { }
 					try { stopEmailVerified?.(); } catch { }
 					try { stopSocialLinks?.(); } catch { }
 				};
-            },
-        },
-    };
+			},
+		},
+	};
 };
