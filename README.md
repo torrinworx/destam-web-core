@@ -1,7 +1,10 @@
 # destam-web-core
 
 ## Scope and goals
+
 destam-web-core extracts the modular foundation of [OpenGig.org](https://github.com/torrinworx/OpenGig.org) into a reusable client/server runtime. It manages client rendering, websocket-based sync, observer-driven state propagation, and server-side job execution so that new projects do not need to re-implement this infrastructure. The library is responsible for connecting authenticated/unauthenticated clients, injecting contextual services into module jobs, and driving the observer-backed state that both sides share, which solves the boilerplate of wiring websockets, persistence, background jobs, and synchronized UI state.
+
+My goal with this project is to aggrigate the components of a webapp that I have built out accross multiple different projects into a single reusable system. This will simplify component iteration, organize the backend logic into standalone modules, create multi module overarching systems like users, and allow for standardization of building components accross multiple web platform repositories.
 
 ## Features
 
