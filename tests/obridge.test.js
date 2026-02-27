@@ -157,6 +157,25 @@ test('Obridge: OArray basic element modify (same stable refs)', async () => {
 	stop();
 });
 
+test('Obridge: OArray insert/delete preserves element refs', async () => {
+	const a = OObject({ list: OArray(['a', 'b']) });
+	const b = OObject({ list: OArray(['a', 'b']) });
+
+	const stop = Obridge({ a: a.observer, b: b.observer, aToB: true });
+
+	a.list.push('c');
+	await tick();
+	assert.equal(b.list.length, 3);
+	assert.equal(b.list[2], 'c');
+
+	a.list.splice(1, 1);
+	await tick();
+	assert.equal(b.list.length, 2);
+	assert.equal(b.list[1], 'c');
+
+	stop();
+});
+
 test('Obridge: emits real deltas (guard test for applyDeltaByPath assumptions)', async () => {
 	const a = OObject({ x: 1 });
 	const seen = [];
