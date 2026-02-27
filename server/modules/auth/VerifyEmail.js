@@ -120,7 +120,7 @@ export default (injection = {}) => {
 				verificationDoc.error = null;
 				await verificationDoc.$odb.flush();
 
-				return { success: true };
+				return { ok: true };
 			} catch (err) {
 				console.error('auth/VerifyEmail error:', err);
 				return { error: 'internal_error' };
