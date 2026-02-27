@@ -85,7 +85,7 @@ export default async function memoryDriver(/* props */) {
 				throw new Error(`memoryDriver.create: duplicate key "${record.key}" in collection "${collection}"`);
 			}
 
-			const stored = clone(record);
+			const stored = clone({ ...record, rev: typeof record.rev === 'number' ? record.rev : 0 });
 			col.docs.set(record.key, stored);
 			col.order.push(record.key);
 
@@ -99,11 +99,21 @@ export default async function memoryDriver(/* props */) {
 			return rec ? clone(rec) : false;
 		},
 
-		async update({ collection, key, record }) {
+		async update({ collection, key, record, expectedRev }) {
 			const col = getCollection(collections, collection);
-			if (!col.docs.has(key)) return false;
+			const existing = col.docs.get(key);
+			if (!existing) return false;
 
-			const stored = clone({ ...record, key });
+			if (typeof expectedRev === 'number') {
+				const hasRev = typeof existing.rev === 'number';
+				if (hasRev) {
+					if (existing.rev !== expectedRev) return false;
+				} else if (expectedRev !== 0) {
+					return false;
+				}
+			}
+
+			const stored = clone({ ...record, key, rev: record.rev });
 			col.docs.set(key, stored);
 
 			emit(watchers, collection, key, stored);

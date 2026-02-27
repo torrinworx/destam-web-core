@@ -7,7 +7,7 @@ import { parse, stringify } from '../common/clone.js';
  * Required:
  * - create({ collection, record }) -> record
  * - get({ collection, key }) -> record | false
- * - update({ collection, key, record }) -> true
+ * - update({ collection, key, record, expectedRev? }) -> true
  * - remove({ collection, key }) -> true (throw/false on failure)
  * - queryOne({ collection, query }) -> record | false
  * - queryMany({ collection, query, options? }) -> record[]
@@ -21,7 +21,8 @@ import { parse, stringify } from '../common/clone.js';
  * {
  *   key: string,              // usually root observer UUID hex (ex: "#A1B2...")
  *   state_tree: object,       // from stringify()/parse()
- *   index: object             // queryable projection (plain JSON)
+ *   index: object,            // queryable projection (plain JSON)
+ *   rev: number               // monotonically increasing revision
  * }
  */
 
@@ -65,6 +66,34 @@ const keyFromState = (state) => {
 	const id = state?.observer?.id;
 	if (!id) throw new Error('ODB: state is missing observer.id');
 	return typeof id.toHex === 'function' ? id.toHex() : String(id);
+};
+
+const isValidStateTree = (state) => {
+	if (!(state instanceof OObject)) return 'root is not an OObject';
+
+	const seen = new WeakSet();
+	const stack = [state];
+	while (stack.length) {
+		const current = stack.pop();
+		if (!current || typeof current !== 'object') continue;
+		if (seen.has(current)) continue;
+		seen.add(current);
+
+		if (Array.isArray(current) && !(current instanceof OArray)) {
+			return 'plain array found in state tree';
+		}
+
+		if (current instanceof OArray) {
+			for (const item of current) stack.push(item);
+			continue;
+		}
+
+		for (const k of Object.keys(current)) {
+			stack.push(current[k]);
+		}
+	}
+
+	return null;
 };
 
 const throttle = (fn, ms) => {
@@ -138,14 +167,44 @@ const syncInto = (dst, src) => {
 
 	// OArray
 	if (dst instanceof OArray && src instanceof OArray) {
-		// keyed-by-element-id reconciliation if possible
-		const allObjectsWithId = (arr) => arr.every(x => x instanceof OObject && (typeof x.id === 'string' || typeof x.id === 'number'));
-		if (allObjectsWithId(dst) && allObjectsWithId(src)) {
-			const map = new Map(dst.map(el => [el.id, el]));
-			const next = [];
+		const hasElementId = (el) => el instanceof OObject && (typeof el.id === 'string' || typeof el.id === 'number');
+		const hasObsKey = (el) => !!obsKey(el);
+		const anyElementId = dst.some(hasElementId) || src.some(hasElementId);
+		const anyObsKey = dst.some(hasObsKey) || src.some(hasObsKey);
+		if (anyElementId || anyObsKey) {
+			const idMap = new Map();
+			const obsMap = new Map();
+			for (const el of dst) {
+				if (hasElementId(el)) {
+					idMap.set(el.id, el);
+				}
+				const key = obsKey(el);
+				if (key) {
+					let list = obsMap.get(key);
+					if (!list) obsMap.set(key, (list = []));
+					list.push(el);
+				}
+			}
 
+			const takeObs = (key) => {
+				const list = obsMap.get(key);
+				if (!list || list.length === 0) return null;
+				const el = list.shift();
+				if (list.length === 0) obsMap.delete(key);
+				return el;
+			};
+
+			const next = [];
 			for (const sEl of src) {
-				const existing = map.get(sEl.id);
+				let existing = null;
+				if (hasElementId(sEl)) {
+					existing = idMap.get(sEl.id) || null;
+				}
+				if (!existing) {
+					const key = obsKey(sEl);
+					if (key) existing = takeObs(key);
+				}
+
 				if (existing) {
 					syncInto(existing, sEl);
 					next.push(existing);
@@ -181,8 +240,11 @@ const syncInto = (dst, src) => {
 	}
 };
 
-export const createODB = async ({ driver, throttleMs = 75, driverProps = {} } = {}) => {
+export const createODB = async ({ driver, throttleMs = 75, driverProps = {}, integrityMode } = {}) => {
 	if (!driver) throw new Error('ODB: missing "driver"');
+
+	const mode = integrityMode || (process.env.NODE_ENV === 'production' ? 'lenient' : 'strict');
+	const isStrict = mode !== 'lenient';
 
 	const d = typeof driver === 'function' ? await driver(driverProps) : driver;
 
@@ -198,22 +260,42 @@ export const createODB = async ({ driver, throttleMs = 75, driverProps = {} } = 
 
 	const cacheKey = (collection, key) => `${collection}::${key}`;
 
-	const recordFromState = (state) => {
+	const recordFromState = (state, { allowSkip = false } = {}) => {
 		if (!(state instanceof OObject)) {
 			throw new Error('ODB: only OObject documents are supported as roots.');
+		}
+
+		const invalid = isValidStateTree(state);
+		if (invalid) {
+			const err = new Error(`ODB: invalid state tree (${invalid})`);
+			if (isStrict || !allowSkip) throw err;
+			console.warn(err.message);
+			return null;
 		}
 
 		const state_tree = JSON.parse(stringify(state));
 		const key = keyFromState(state);
 		const index = makeIndex(state);
+		const rev = 0;
 
-		return { key, state_tree, index };
+		return { key, state_tree, index, rev };
 	};
 
-	const stateFromRecord = (record) => {
+	const stateFromRecord = (record, { allowSkip = false } = {}) => {
 		const state = parse(JSON.stringify(record.state_tree));
 		if (!(state instanceof OObject)) {
-			throw new Error('ODB: parsed document root is not an OObject.');
+			const err = new Error('ODB: parsed document root is not an OObject.');
+			if (isStrict || !allowSkip) throw err;
+			console.warn(err.message);
+			return null;
+		}
+
+		const invalid = isValidStateTree(state);
+		if (invalid) {
+			const err = new Error(`ODB: invalid state tree (${invalid})`);
+			if (isStrict || !allowSkip) throw err;
+			console.warn(err.message);
+			return null;
 		}
 		return state;
 	};
@@ -243,22 +325,28 @@ export const createODB = async ({ driver, throttleMs = 75, driverProps = {} } = 
 			state,
 			collection,
 			key,
+			rev: typeof record.rev === 'number' ? record.rev : 0,
 
 			_refs: 1,
 			_suppress: 0,
 			_stopLocal: null,
 			_stopRemote: null,
 			_throttledSave: null,
+			_saveLock: Promise.resolve(),
 
 			flush: async () => handle._throttledSave.flush(),
 			reload: async () => {
 				const rec = await d.get({ collection, key: handle.key });
 				if (!rec) return false;
 
-				const next = stateFromRecord(rec);
+				const next = stateFromRecord(rec, { allowSkip: !isStrict });
+				if (!next) return false;
+				if (typeof rec.rev === 'number' && rec.rev <= handle.rev) return true;
 				handle._suppress++;
 				try { syncInto(handle.state, next); }
 				finally { handle._suppress--; }
+
+				if (typeof rec.rev === 'number') handle.rev = rec.rev;
 
 				return true;
 			},
@@ -286,9 +374,41 @@ export const createODB = async ({ driver, throttleMs = 75, driverProps = {} } = 
 		const saveNow = async () => {
 			if (handle._suppress) return;
 
-			const rec = recordFromState(handle.state);
-			const ok = await d.update({ collection, key: handle.key, record: rec });
-			if (!ok) throw new Error(`ODB: driver.update() returned false for key=${handle.key}`);
+			const run = async () => {
+				if (handle._suppress) return;
+
+				for (let attempt = 0; attempt < 2; attempt++) {
+					if (handle._suppress) return;
+
+					const rec = recordFromState(handle.state, { allowSkip: !isStrict });
+					if (!rec) return;
+					rec.rev = handle.rev + 1;
+					const ok = await d.update({ collection, key: handle.key, record: rec, expectedRev: handle.rev });
+					if (ok) {
+						handle.rev = rec.rev;
+						return;
+					}
+
+					const err = new Error(`ODB: driver.update() conflict for key=${handle.key}`);
+					if (attempt === 0) {
+						try {
+							const reloaded = await handle.reload();
+							if (!reloaded) return;
+							continue;
+						} catch {
+							// fall through to strict/lenient handling
+						}
+					}
+
+					if (isStrict) throw err;
+					console.warn(err.message);
+					return;
+				}
+			};
+
+			const result = handle._saveLock.then(run, run);
+			handle._saveLock = result.catch(() => {});
+			return result;
 		};
 
 		handle._throttledSave = throttle(saveNow, throttleMs);
@@ -304,11 +424,15 @@ export const createODB = async ({ driver, throttleMs = 75, driverProps = {} } = 
 			key: handle.key,
 			onRecord: (rec) => {
 				if (!rec) return; // treat as "deleted" if you want later
-				const next = stateFromRecord(rec);
+				if (typeof rec.rev === 'number' && rec.rev <= handle.rev) return;
+				const next = stateFromRecord(rec, { allowSkip: !isStrict });
+				if (!next) return;
 
 				handle._suppress++;
 				try { syncInto(handle.state, next); }
 				finally { handle._suppress--; }
+
+				if (typeof rec.rev === 'number') handle.rev = rec.rev;
 			}
 		});
 
@@ -352,7 +476,8 @@ export const createODB = async ({ driver, throttleMs = 75, driverProps = {} } = 
 
 		value = ensureValueMatchesQuery(value, normalizedQuery);
 
-		const rec = recordFromState(value);
+		const rec = recordFromState(value, { allowSkip: !isStrict });
+		if (!rec) throw new Error('ODB.open: invalid value (state tree)');
 		const created = await d.create({ collection, record: rec });
 		return openFromRecord({ collection, record: created });
 	};
@@ -371,7 +496,16 @@ export const createODB = async ({ driver, throttleMs = 75, driverProps = {} } = 
 		if (!query || !Object.keys(query).length) throw new Error('ODB.findMany: "query" is required.');
 
 		const recs = await d.queryMany({ collection, query: deepNormalize(query), options });
-		return Promise.all(recs.map(record => openFromRecord({ collection, record })));
+		const out = [];
+		for (const record of recs) {
+			const doc = await openFromRecord({ collection, record }).catch(err => {
+				if (isStrict) throw err;
+				console.warn(err.message);
+				return null;
+			});
+			if (doc) out.push(doc);
+		}
+		return out;
 	};
 
 	const remove = async ({ collection, query } = {}) => {

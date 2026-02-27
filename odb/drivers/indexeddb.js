@@ -196,7 +196,7 @@ export default async function indexeddbDriver({
 			if (!collection) throw new Error('indexeddbDriver.create: missing collection');
 			if (!record?.key) throw new Error('indexeddbDriver.create: record.key required');
 
-			const stored = clone(record);
+			const stored = clone({ ...record, rev: typeof record.rev === 'number' ? record.rev : 0 });
 
 			await withStore(collection, 'readwrite', async (store) => {
 				// add will fail if key exists (ConstraintError) -> fine
@@ -222,15 +222,23 @@ export default async function indexeddbDriver({
 			return rec ? clone(rec) : false;
 		},
 
-		async update({ collection, key, record }) {
+		async update({ collection, key, record, expectedRev }) {
 			if (!collection) throw new Error('indexeddbDriver.update: missing collection');
 			if (!key) throw new Error('indexeddbDriver.update: missing key');
 
-			const stored = clone({ ...record, key });
+			const stored = clone({ ...record, key, rev: record.rev });
 
 			const ok = await withStore(collection, 'readwrite', async (store) => {
 				const existing = await reqToPromise(store.get(key));
 				if (!existing) return false;
+				if (typeof expectedRev === 'number') {
+					const hasRev = typeof existing.rev === 'number';
+					if (hasRev) {
+						if (existing.rev !== expectedRev) return false;
+					} else if (expectedRev !== 0) {
+						return false;
+					}
+				}
 				await reqToPromise(store.put(stored));
 				return true;
 			});

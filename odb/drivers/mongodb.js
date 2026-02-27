@@ -80,9 +80,15 @@ export default async function mongodbDriver({
 				key: record.key,
 				state_tree: record.state_tree,
 				index: record.index,
+				rev: typeof record.rev === 'number' ? record.rev : 0,
 			});
 
-			return { key: record.key, state_tree: record.state_tree, index: record.index };
+			return {
+				key: record.key,
+				state_tree: record.state_tree,
+				index: record.index,
+				rev: typeof record.rev === 'number' ? record.rev : 0,
+			};
 		},
 
 		async get({ collection, key }) {
@@ -90,22 +96,36 @@ export default async function mongodbDriver({
 
 			const doc = await col.findOne(
 				{ key },
-				{ projection: { _id: 0, key: 1, state_tree: 1, index: 1 } }
+				{ projection: { _id: 0, key: 1, state_tree: 1, index: 1, rev: 1 } }
 			);
 
 			return doc || false;
 		},
 
-		async update({ collection, key, record }) {
+		async update({ collection, key, record, expectedRev }) {
 			const col = await getCol(collection);
-
+			let filter = { key };
+			if (typeof expectedRev === 'number') {
+				if (expectedRev === 0) {
+					filter = {
+						key,
+						$or: [
+							{ rev: 0 },
+							{ rev: { $exists: false } },
+						],
+					};
+				} else {
+					filter = { key, rev: expectedRev };
+				}
+			}
 			const res = await col.updateOne(
-				{ key },
+				filter,
 				{
 					$set: {
 						key,
 						state_tree: record.state_tree,
 						index: record.index,
+						rev: record.rev,
 					},
 				},
 				{ upsert: false }
@@ -127,7 +147,7 @@ export default async function mongodbDriver({
 			const filter = withDotNotation(query, 'index');
 
 			const doc = await col.findOne(filter, {
-				projection: { _id: 0, key: 1, state_tree: 1, index: 1 },
+				projection: { _id: 0, key: 1, state_tree: 1, index: 1, rev: 1 },
 				sort: { _id: 1 },
 			});
 
@@ -141,7 +161,7 @@ export default async function mongodbDriver({
 			const limit = options?.limit ?? 0;
 
 			const cursor = col.find(filter, {
-				projection: { _id: 0, key: 1, state_tree: 1, index: 1 },
+				projection: { _id: 0, key: 1, state_tree: 1, index: 1, rev: 1 },
 				sort: { _id: 1 },
 			});
 
@@ -158,7 +178,7 @@ export default async function mongodbDriver({
 				filter || {},
 				{
 					...options,
-					projection: options?.projection ?? { _id: 0, key: 1, state_tree: 1, index: 1 },
+					projection: options?.projection ?? { _id: 0, key: 1, state_tree: 1, index: 1, rev: 1 },
 				}
 			);
 
@@ -170,7 +190,7 @@ export default async function mongodbDriver({
 
 			const cursor = col.find(filter || {}, {
 				...options,
-				projection: options?.projection ?? { _id: 0, key: 1, state_tree: 1, index: 1 },
+				projection: options?.projection ?? { _id: 0, key: 1, state_tree: 1, index: 1, rev: 1 },
 			});
 
 			if (options?.sort) cursor.sort(options.sort);
@@ -235,8 +255,8 @@ export default async function mongodbDriver({
 				if (closed) return;
 				if (!change.fullDocument) return onRecord(null);
 
-				const { key, state_tree, index } = change.fullDocument;
-				onRecord({ key, state_tree, index });
+				const { key, state_tree, index, rev } = change.fullDocument;
+				onRecord({ key, state_tree, index, rev });
 			});
 
 			stream.on('error', () => {
