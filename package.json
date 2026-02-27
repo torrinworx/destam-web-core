@@ -25,7 +25,8 @@
         "luxon": "^3.7.2",
         "mongodb": "^7.1.0",
         "uuid": "^11.0.3",
-        "ws": "^8.18.0"
+        "ws": "^8.18.0",
+        "leaflet": "^1.9.4"
     },
     "optionalDependencies": {
         "nodemailer": "^8.0.1"
