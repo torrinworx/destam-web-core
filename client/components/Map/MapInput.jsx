@@ -28,15 +28,6 @@ Theme.define({
 		minHeight: 0,
 	},
 
-	mapInput_controls: {
-		display: 'flex',
-		flexDirection: 'row',
-		alignItems: 'center',
-		flexWrap: 'wrap',
-		gap: 10,
-		width: '100%',
-	},
-
 	mapInput_controlsRow: {
 		display: 'flex',
 		gap: 8,
@@ -340,7 +331,7 @@ export default ThemeContext.use(h => {
 			})();
 		}));
 
-		const defaultControls = <Paper type="mapInput_controls" style={{ padding: 10 }}>
+		const defaultControls = <div style={{ padding: 10 }}>
 			<div
 				theme="mapInput_controlsRow"
 				style={{
@@ -377,27 +368,13 @@ export default ThemeContext.use(h => {
 				/> : null}
 
 				<Shown value={showRadius}>
-					<div
-						theme="mapInput_controlsRow"
-						style={{
-							display: 'flex',
-							flexDirection: 'row',
-							alignItems: 'center',
-							gap: 8,
-							flexWrap: 'wrap',
-						}}
-					>
-						<Typography type="p2" label="Radius" />
-						<Typography type="p2" label={radiusLabel} />
-						<div style={{ minWidth: 220 }}>
-							<Slider
-								value={radius}
-								min={minRadiusObserver}
-								max={maxRadiusObserver}
-								step={radiusStepObserver}
-							/>
-						</div>
-					</div>
+					<Slider
+						style={{ padding: 0 }}
+						value={radius}
+						min={minRadiusObserver}
+						max={maxRadiusObserver}
+						step={radiusStepObserver}
+					/>
 				</Shown>
 
 				<Shown value={showSearch}>
@@ -427,7 +404,6 @@ export default ThemeContext.use(h => {
 
 						<mark:popup>
 							<Paper
-								type="mapInput_searchPopup"
 								style={{
 									width: searchAnchorWidth.map(w => Number.isFinite(w) && w > 0 ? w : 320),
 									minWidth: 260,
@@ -450,26 +426,26 @@ export default ThemeContext.use(h => {
 								<Shown value={showEmptyResults}>
 									<Typography type="p2" label="No results" />
 								</Shown>
-						{searchResults.map(results => (results || []).map((result, idx) => (
-							<Button
-								key={idx}
-								type="text"
-								onClick={() => selectSearchResult(result)}
-								style={{
-									width: '100%',
-									alignItems: 'flex-start',
-									justifyContent: 'flex-start',
-									flexDirection: 'column',
-									gap: 2,
-									padding: '8px 6px',
-									borderBottom: '1px solid $alpha($color_top, 0.08)',
-									borderRadius: 0,
-								}}
-							>
-								<Typography type="p2" label={result?.label || 'Unknown'} />
-								{result?.type ? <Typography type="p3" label={result.type} style={{ opacity: 0.7 }} /> : null}
-							</Button>
-						))).unwrap()}
+								{searchResults.map(results => (results || []).map((result, idx) => (
+									<Button
+										key={idx}
+										type="text"
+										onClick={() => selectSearchResult(result)}
+										style={{
+											width: '100%',
+											alignItems: 'flex-start',
+											justifyContent: 'flex-start',
+											flexDirection: 'column',
+											gap: 2,
+											padding: '8px 6px',
+											borderBottom: '1px solid $alpha($color_top, 0.08)',
+											borderRadius: 0,
+										}}
+									>
+										<Typography type="p2" label={result?.label || 'Unknown'} />
+										{result?.type ? <Typography type="p3" label={result.type} style={{ opacity: 0.7 }} /> : null}
+									</Button>
+								))).unwrap()}
 								<Shown value={searchAttribution.map(a => !!a)}>
 									<Typography type="p3" label={searchAttribution} theme="mapInput_searchAttribution" />
 								</Shown>
@@ -478,7 +454,7 @@ export default ThemeContext.use(h => {
 					</Detached>
 				</Shown>
 			</div>
-		</Paper>;
+		</div>;
 
 		const overlayControls = renderControls
 			? renderControls(api)
